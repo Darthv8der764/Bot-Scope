@@ -51,6 +51,9 @@ _IMAGE_META = (b"Exif", b"xmpmeta", b"tEXt", b"iTXt", b"zTXt")    # camera/GPS/a
 _LINK = re.compile(r"""\]\(([^)\s]+)[^)]*\)|\bsrc=["']([^"']+)["']""")
 PUBLISH_NAME = "BotScope contributors"                            # the one commit's author: never your own name
 PUBLISH_EMAIL = "noreply@example.com"
+PUBLIC_REPO = "https://github.com/Darthv8der764/Bot-Scope"        # the public copy; never the private BotScope repo
+UPDATE_OUT = Path("~/.botscope/publish-update").expanduser()
+UPDATE_MARKER = "botscope-update"                                 # inside .git/: this clone is one update() made
 
 _PATTERNS = [
     ("key", re.compile(r"\b(?:AK|PK|CK)[A-Z0-9]{16,}\b")),                                   # Alpaca key ids
@@ -109,7 +112,8 @@ def build_private(sources: list[str] | None = None, names: list[str] | None = No
         fps |= fingerprints(t)
         hashes.add(code_hash(t))
         stems.add(f.stem.lower())
-    out = {"strategy_names": sorted(stems | {n.lower() for n in (names or cfg.get("names") or [])}),
+    given = {n.lower() for n in (names or cfg.get("names") or [])}
+    out = {"strategy_names": sorted(stems | given), "names": sorted(given),
            "words": sorted(set(words or cfg.get("words") or [])), "code_hashes": sorted(hashes),
            "rule_fingerprints": sorted(fps)}
     PRIVATE_LIST.write_text(json.dumps(out, indent=1))
@@ -254,7 +258,8 @@ def run(out: str | None = None, keep: bool = True) -> dict:
     for h in hits:
         by_kind[h["kind"]] = by_kind.get(h["kind"], 0) + 1
     verdict = ("PASS: nothing personal found in the export. Going public still needs your (and a parent's) go-ahead. "
-               "Next: publish-check --make-repo turns the export into a fresh one-commit repo (nothing is pushed)."
+               "Next: publish-check --make-repo turns the export into a fresh one-commit repo, or publish-check --update "
+               "makes one new commit on top of the public repo (nothing is pushed by either)."
                if ok else "FAIL: do not publish. Fix every hit (or replace the file with a generic example) and run again.")
     if not priv:
         verdict += " No private list yet: run publish_check(how=\"build_private\") so your own strategies are checked too."
@@ -266,8 +271,10 @@ def run(out: str | None = None, keep: bool = True) -> dict:
 
 # ---------- a brand-new repo from the export (never this repo's history) ----------
 def _git(dest: Path, *args: str) -> str:
-    cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-c", "init.templateDir=", *args]
+    cmd = ["git", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", "-c", "init.templateDir=",
+           "-c", "credential.helper=", *args]
     env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",   # no aliases, hooks, signing
+           "GIT_TERMINAL_PROMPT": "0",                                  # a read-only clone never asks for a login
            "GIT_AUTHOR_NAME": PUBLISH_NAME, "GIT_AUTHOR_EMAIL": PUBLISH_EMAIL, "GIT_AUTHOR_DATE": _today_utc(),
            "GIT_COMMITTER_NAME": PUBLISH_NAME, "GIT_COMMITTER_EMAIL": PUBLISH_EMAIL, "GIT_COMMITTER_DATE": _today_utc()}
     return subprocess.run(cmd, cwd=dest, env=env, capture_output=True, text=True, check=True).stdout.strip()
@@ -278,26 +285,36 @@ def _today_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00+0000")     # the day only, no time or time zone
 
 
+def _inside_root(p: Path) -> bool:
+    return p.resolve() == ROOT.resolve() or ROOT.resolve() in p.resolve().parents
+
+
+def _passed_export(dest: Path) -> str | None:
+    """None if `dest` is an export publish-check made, its scan passed and nothing in it changed since; else why not."""
+    if not dest.is_dir():
+        return f"no export at {dest}: run publish-check first"
+    if _inside_root(dest):
+        return "the export folder must be outside the BotScope folder"
+    try:
+        stamp = json.loads((dest / MARKER).read_text())
+    except (OSError, ValueError):
+        return f"{dest} isn't a folder publish-check made (or is from an older version): run publish-check again"
+    if stamp.get("ok") is not True:
+        return "its publish-check didn't PASS: fix every hit, run publish-check again"
+    if stamp.get("tree") != tree_hash(dest):
+        return "files in the export changed after the scan: run publish-check again"
+    return None
+
+
 def make_repo(out: str | None = None) -> dict:
     """Turn a PASSed export into a brand-new git repo with exactly one commit: no history from this repo, no remote,
     nothing pushed. Refuses unless the folder is one publish-check made, its scan passed, and nothing in it changed
     since. Prints the commands to publish it later, which is the user's (and a parent's) decision."""
     dest = Path(out).expanduser() if out else DEFAULT_OUT
-    if not dest.is_dir():
-        return {"ok": False, "error": f"no export at {dest}: run publish-check first"}
-    if dest.resolve() == ROOT.resolve() or ROOT.resolve() in dest.resolve().parents:
-        return {"ok": False, "error": "the export folder must be outside the BotScope folder"}
-    try:
-        stamp = json.loads((dest / MARKER).read_text())
-    except (OSError, ValueError):
-        return {"ok": False, "error": f"{dest} isn't a folder publish-check made (or is from an older version): "
-                                      "run publish-check again"}
-    if stamp.get("ok") is not True:
-        return {"ok": False, "error": "its publish-check didn't PASS: fix every hit, run publish-check again"}
+    if err := _passed_export(dest):
+        return {"ok": False, "error": err}
     if (dest / ".git").exists():
         return {"ok": False, "error": f"{dest} is already a git repo: run publish-check again for a fresh copy"}
-    if stamp.get("tree") != tree_hash(dest):
-        return {"ok": False, "error": "files in the export changed after the scan: run publish-check again"}
     _git(dest, "init", "-q", "-b", "main")
     (dest / ".git" / "info").mkdir(exist_ok=True)
     (dest / ".git" / "info" / "exclude").write_text(MARKER + "\n")       # the export's stamp stays out of the commit
@@ -322,3 +339,126 @@ def make_repo(out: str | None = None) -> dict:
             "never": "Never push your own BotScope folder, and never make a GitHub repo public that it was pushed to: "
                      "their history has your notes and strategies. If that private repo already has the name you "
                      "want (BotScope), rename it first (e.g. BotScope-private), then make the new empty one."}
+
+
+# ---------- an update on top of the public repo's history ----------
+def name_hits(dest: Path, priv: dict) -> list[dict]:
+    """A second check: every text file in the export grepped for each private name (also with its _ as a space or -),
+    whole words, any case. The scan only looks at bot file names and name = "..." lines, so a very short name written
+    in a doc or a comment could slip past it. Greps the names you gave ("names") and every multi-part strategy name
+    (with _, - or a digit); single-word file names from your strategy folders (data, signals, helpers) are everyday
+    words, so they're left to the scan."""
+    picked = set(priv.get("names") or []) | {n for n in priv.get("strategy_names") or [] if re.search(r"[_\-0-9 ]", n)}
+    names = {v for n in picked if n for v in (n, n.replace("_", " "), n.replace("_", "-"))}
+    if not names:
+        return []
+    rx = re.compile(r"(?i)(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+                    + r")(?![A-Za-z0-9_])")
+    hits = []
+    for p in sorted(p for p in dest.rglob("*") if p.is_file() and p.name != MARKER and ".git" not in
+                    p.relative_to(dest).parts):
+        rel = p.relative_to(dest).as_posix()
+        for m in rx.finditer(rel):
+            hits.append({"file": rel, "line": 0, "kind": "private name in a file name", "text": m.group()})
+        try:
+            text = p.read_text()
+        except UnicodeDecodeError:
+            continue                                   # reviewed images: pinned by hash already
+        for i, line in enumerate(text.splitlines(), 1):
+            for m in rx.finditer(line):
+                hits.append({"file": rel, "line": i, "kind": "private name", "text": m.group()})
+    return hits
+
+
+def _history_hits(repo: Path) -> list[dict]:
+    """Every path any commit on the public main ever touched must be one a clean export can hold."""
+    home = kept_home()
+    touched = {p for p in _git(repo, "log", "-m", "--format=", "--name-only", "--no-renames", "HEAD").splitlines() if p}
+    return [{"file": p, "line": 0, "kind": "not from a clean export", "text": "in the public repo's history"}
+            for p in sorted(touched) if not (allowed(p) or p in REVIEWED_IMAGES) or p in home
+            or p.startswith("bots_private/")]
+
+
+def _summary(changes: list[tuple[str, str]]) -> str:
+    """The commit message: counts in plain words, then each file. Paths come from the export, which passed the scan."""
+    groups = {"added": [p for s, p in changes if s == "A"], "changed": [p for s, p in changes if s == "M"],
+              "removed": [p for s, p in changes if s == "D"]}
+    plural = lambda n: f"{n} file{'' if n == 1 else 's'}"
+    head = "BotScope update: " + ", ".join(f"{plural(len(v))} {k}" for k, v in groups.items() if v)
+    body = [f"{k.capitalize()}:\n" + "\n".join(f"- {p}" for p in v[:60]) + (f"\n- and {len(v) - 60} more"
+            if len(v) > 60 else "") for k, v in groups.items() if v]
+    return head + "\n\n" + "\n\n".join(body)
+
+
+def update(out: str | None = None, into: str | None = None) -> dict:
+    """Make ONE new commit on top of the public repo's main from a PASSed export. Clones PUBLIC_REPO read-only (no
+    login) into a scratch folder this function made, replaces every tracked file with the export's (deletions too) and
+    commits as BotScope contributors. Never adds another remote and never pushes: it prints the push command."""
+    src = Path(out).expanduser() if out else DEFAULT_OUT
+    repo = Path(into).expanduser() if into else UPDATE_OUT
+    if err := _passed_export(src):
+        return {"ok": False, "error": err}
+    if _inside_root(repo):
+        return {"ok": False, "error": "the update folder must be outside the BotScope folder"}
+    if repo.resolve() == src.resolve() or src.resolve() in repo.resolve().parents:
+        return {"ok": False, "error": "the update folder must be separate from the export"}
+    priv = _private()
+    if not priv:
+        return {"ok": False, "error": 'no private list: run publish_check(how="build_private") first'}
+    if "names" not in priv:
+        return {"ok": False, "error": 'your private list is from an older version: run publish_check(how='
+                                      '"build_private") again so the second check knows the names you gave'}
+    if hits := name_hits(src, priv):
+        return {"ok": False, "error": "FAIL: the export names one of your own strategies; nothing was cloned or "
+                                      "committed. Fix each hit, run publish-check again.",
+                "hits": len(hits), "first_hits": hits[:40]}
+    if repo.exists():
+        if not (repo / ".git" / UPDATE_MARKER).exists():
+            return {"ok": False, "error": f"{repo} exists and isn't a folder publish-check --update made; "
+                                          "pick another folder or move it away"}
+        shutil.rmtree(repo)                            # always a fresh clone of what is public now
+    repo.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _git(repo.parent, "clone", "-q", "--branch", "main", "--single-branch", "--no-recurse-submodules",
+             PUBLIC_REPO, str(repo))
+    except subprocess.CalledProcessError as e:
+        shutil.rmtree(repo, ignore_errors=True)
+        return {"ok": False, "error": f"couldn't clone {PUBLIC_REPO} main: {(e.stderr or '').strip()[:300]}"}
+    (repo / ".git" / UPDATE_MARKER).write_text("made by botscope publish-check --update; safe to delete\n")
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "exclude").write_text(MARKER + "\n")
+    if hits := _history_hits(repo):
+        return {"ok": False, "error": "REFUSED: the public repo's history has files a clean export never holds. Do "
+                                      "not push anything from here; look at that repo on GitHub first.",
+                "hits": len(hits), "first_hits": hits[:40], "repo": str(repo)}
+    before = _git(repo, "rev-parse", "HEAD")
+    for p in _git(repo, "ls-files", "-z").split("\0"):
+        if p:
+            (repo / p).unlink(missing_ok=True)
+    for p in sorted(p for p in src.rglob("*") if p.is_file() and p.name != MARKER and ".git" not in
+                    p.relative_to(src).parts):
+        rel = p.relative_to(src)
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, repo / rel)
+    _git(repo, "add", "-A")
+    changes = [tuple(x.split("\t", 1)) for x in _git(repo, "diff", "--cached", "--no-renames", "--name-status")
+               .splitlines() if x]
+    if not changes:
+        return {"ok": True, "repo": str(repo), "new_commits": 0,
+                "verdict": "Nothing changed: the public repo already matches your clean export. Nothing to push."}
+    _git(repo, "commit", "-q", "-m", _summary(changes))
+    new = _git(repo, "rev-list", "--count", f"{before}..HEAD")
+    remotes = _git(repo, "remote").split()
+    url = _git(repo, "remote", "get-url", "origin")
+    if new != "1" or remotes != ["origin"] or url != PUBLIC_REPO:       # can't happen; stop loudly if it ever does
+        return {"ok": False, "error": f"unexpected repo state: {new} new commits, remotes {remotes!r} {url!r}"}
+    q = lambda p: f'"{p}"' if " " in str(p) else str(p)
+    count = lambda s: sum(1 for c, _ in changes if c == s)
+    return {"ok": True, "repo": str(repo), "new_commits": 1, "on_top_of": before[:12],
+            "added": count("A"), "changed": count("M"), "removed": count("D"),
+            "message": _git(repo, "log", "-1", "--format=%s"), "author": f"{PUBLISH_NAME} <{PUBLISH_EMAIL}>",
+            "verdict": f"Made one new commit on top of {PUBLIC_REPO} main from your clean export. Nothing was pushed "
+                       "or published.",
+            "to_publish": f"cd {q(repo)} && git push origin main",
+            "decision": "Running that push command publishes this update to the public repo for everyone to see. "
+                        "Whether and when is your (and a parent's) decision; nothing here does it for you."}

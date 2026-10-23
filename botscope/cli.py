@@ -203,6 +203,8 @@ def main(argv: list[str] | None = None, wait: bool = True) -> int:
         return 0
     if argv[0] == "publish-check" and "--make-repo" in argv:              # botscope publish-check --make-repo
         argv = [a for a in argv if a != "--make-repo"] + ["how=make_repo"]
+    if argv[0] == "publish-check" and "--update" in argv:                 # botscope publish-check --update
+        argv = [a for a in argv if a != "--update"] + ["how=update"]
     name = {"publish-check": "publish_check"}.get(argv[0], argv[0])
     if name not in ts:
         close = difflib.get_close_matches(name, ts, n=1)

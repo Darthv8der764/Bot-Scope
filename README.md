@@ -4,6 +4,25 @@
 
 **Look inside your own trading bots, from your own Claude.** Free for personal use.
 
+## Install: just ask Claude
+In Claude Code, say:
+
+> **install the BotScope plugin from Darthv8der764/Bot-Scope**
+
+Then restart Claude Code and say **"set me up"**. Claude opens BotScope Studio's **Get started** tab, which walks you
+through everything step by step (it works right away on demo prices; real market data needs free Alpaca paper keys).
+
+<details><summary>Or type the commands yourself</summary>
+
+BotScope needs [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh` on a Mac or Linux), then:
+```bash
+claude plugin marketplace add Darthv8der764/Bot-Scope
+```
+```bash
+claude plugin install botscope@botscope
+```
+</details>
+
 BotScope is a toolkit you plug into Claude (an MCP server + a Claude Code plugin, about 90 tools). It shows what a
 bot sees candle by candle, tests it honestly (tuned years vs untested years, real costs, a luck meter), and keeps
 every order on paper unless you go through a strict graduation test. **Not financial advice.**
@@ -14,7 +33,7 @@ every order on paper unless you go through a strict graduation test. **Not finan
 With no keys, BotScope runs in **demo mode**: made-up prices generated on your computer, with a **DEMO DATA** badge
 on every page and every result. Nothing real, nothing to sign up for. Needs [uv](https://docs.astral.sh/uv/).
 ```bash
-git clone <this repo> botscope && cd botscope
+git clone https://github.com/Darthv8der764/Bot-Scope.git botscope && cd botscope
 ```
 ```bash
 uv run botscope demo
@@ -432,6 +451,20 @@ it again). `--make-repo` refuses unless the folder is one publish-check made, it
 The new repo has no history from your folder, a neutral author ("BotScope contributors") and no remote; it never
 pushes. It prints the commands to publish it later yourself (make an empty public GitHub repo, `git remote add`,
 `git push`). Whether and when to publish is your (and a parent's) decision.
+
+To publish an update once the public repo exists, run the scan again, then `--update` instead of `--make-repo`:
+```bash
+botscope publish-check              # a fresh clean export and scan
+botscope publish-check --update     # only after a PASS: one new commit on top of the public repo (nothing is pushed)
+```
+`--update` clones the public repo's `main` (read-only, no login) into `~/.botscope/publish-update`, replaces its files
+with the new export (files you removed are removed there too) and makes one new commit by "BotScope contributors"
+that lists the files added, changed and removed. It refuses if the scan didn't pass, if that folder exists and isn't
+one it made, or if the public repo's history holds anything a clean export never would (your notes, `bots_private/`,
+`botscope.local.json`). As a second check it also searches the export for the names you gave in `botscope.local.json`
+`"private": {"names": [...]}`, since a very short name can slip past the scan (rerun `publish_check(how="build_private")`
+once so the private list holds them). It adds no other remote and never pushes: it prints the one command that does,
+`cd ~/.botscope/publish-update && git push origin main`, and running it publishes the update for everyone to see.
 
 ## License
 Free to use for personal, noncommercial purposes, including researching, paper trading and informing trades in your

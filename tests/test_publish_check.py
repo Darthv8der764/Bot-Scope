@@ -45,7 +45,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(pc, "ROOT", r)
     monkeypatch.setattr(pc, "PRIVATE_LIST", r / "botscope.private.json")
     monkeypatch.setattr(pc, "kept_home", lambda: set())          # not your real botscope.local.json
-    (r / "botscope.private.json").write_text(json.dumps({"strategy_names": ["secret_orb"], "code_hashes": [],
+    (r / "botscope.private.json").write_text(json.dumps({"strategy_names": ["secret_orb"], "names": [], "code_hashes": [],
                                                          "rule_fingerprints": [], "words": []}))
     return r
 
@@ -162,3 +162,121 @@ def test_make_repo_refuses_unless_a_fresh_pass(repo, tmp_path):
     assert pc.run(str(exp))["ok"]
     (exp / "README.md").write_text("edited after the scan\n")
     assert "changed after the scan" in pc.make_repo(str(exp))["error"] and not (exp / ".git").exists()
+
+
+def _git_out(path, *args):
+    return subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, check=True).stdout.strip()
+
+
+@pytest.fixture
+def public(repo, tmp_path, monkeypatch):
+    """A local bare repo standing in for GitHub, holding a first version made by --make-repo (no network)."""
+    first = tmp_path / "first"
+    assert pc.run(str(first))["ok"] and pc.make_repo(str(first))["ok"]
+    bare = tmp_path / "public.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(first), str(bare)], check=True)
+    monkeypatch.setattr(pc, "PUBLIC_REPO", str(bare))
+    return bare
+
+
+def _commit(repo):
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+
+def test_update_one_commit_on_top_with_deletions_nothing_pushed(repo, public, tmp_path):
+    (repo / "bots" / "clean.py").unlink()                                       # removed
+    (repo / "bots" / "calm.py").write_text("name = 'Calm'\n")                   # added
+    (repo / "README.md").write_text("hello again\n")                            # changed
+    _commit(repo)
+    exp, into = tmp_path / "exp", tmp_path / "upd"
+    assert pc.run(str(exp))["ok"]
+    before = _git_out(public, "rev-parse", "main")
+    out = pc.update(str(exp), str(into))
+    assert out["ok"] and out["new_commits"] == 1 and (out["added"], out["changed"], out["removed"]) == (1, 1, 1)
+    assert _git_out(into, "rev-parse", "HEAD~1") == before and _commits(into) == "2"
+    assert sorted(_git_out(into, "ls-files").split()) == ["README.md", "bots/calm.py"]
+    assert _git_out(into, "remote") == "origin" and _git_out(into, "remote", "get-url", "origin") == str(public)
+    msg = _git_out(into, "log", "-1", "--format=%an <%ae> %ad%n%B")
+    assert msg.startswith(f"{pc.PUBLISH_NAME} <{pc.PUBLISH_EMAIL}>") and "+0000" in msg
+    assert "1 file added, 1 file changed, 1 file removed" in msg and "- bots/clean.py" in msg
+    assert out["to_publish"] == f"cd {into} && git push origin main" and "publishes" in out["decision"]
+    assert _git_out(public, "rev-parse", "main") == before                      # nothing pushed
+    again = pc.update(str(exp), str(into))                                      # re-run: fresh clone, same one commit
+    assert again["ok"] and again["new_commits"] == 1 and _commits(into) == "2"
+
+
+def test_update_nothing_changed_makes_no_commit(repo, public, tmp_path):
+    assert pc.run(str(tmp_path / "exp"))["ok"]
+    out = pc.update(str(tmp_path / "exp"), str(tmp_path / "upd"))
+    assert out["ok"] and out["new_commits"] == 0 and _commits(tmp_path / "upd") == "1"
+
+
+def test_update_refuses_a_failing_scan_and_unknown_folders(repo, public, tmp_path):
+    (repo / "bots" / "secret_orb.py").write_text("x = 1\n")
+    _commit(repo)
+    exp, into = tmp_path / "exp", tmp_path / "upd"
+    assert pc.run(str(exp))["ok"] is False
+    assert "didn't PASS" in pc.update(str(exp), str(into))["error"] and not into.exists()
+    (repo / "bots" / "secret_orb.py").unlink()
+    subprocess.run(["git", "rm", "-q", "--cached", "bots/secret_orb.py"], cwd=repo, check=True)
+    assert pc.run(str(exp))["ok"]
+    mine = tmp_path / "mine"
+    mine.mkdir()
+    (mine / "keep.txt").write_text("x")
+    assert "isn't a folder publish-check --update made" in pc.update(str(exp), str(mine))["error"]
+    assert (mine / "keep.txt").exists()
+    assert "outside" in pc.update(str(exp), str(repo / "upd"))["error"]
+
+
+def test_update_refuses_a_private_name_the_scanner_misses(repo, public, tmp_path):
+    (repo / "README.md").write_text("my secret orb idea, see Secret-ORB\n")     # prose, not a bot file or name = line
+    _commit(repo)
+    exp, into = tmp_path / "exp", tmp_path / "upd"
+    assert pc.run(str(exp))["ok"]                                               # the scan alone lets it through
+    out = pc.update(str(exp), str(into))
+    assert out["ok"] is False and out["hits"] == 2 and not into.exists()
+    words = tmp_path / "words"
+    words.mkdir()
+    (words / "a.md").write_text("absorb the orbit\n")
+    assert pc.name_hits(words, {"names": ["orb"]}) == []                        # whole words only
+    (words / "b.md").write_text("try the QZX bot\n")
+    assert len(pc.name_hits(words, {"names": ["qzx"]})) == 1                     # a short name you gave is found
+    assert pc.name_hits(words, {"strategy_names": ["qzx", "data"]}) == []        # single-word file names: left out
+
+
+def test_update_refuses_an_old_private_list(repo, public, tmp_path):
+    (repo / "botscope.private.json").write_text(json.dumps({"strategy_names": ["secret_orb"]}))
+    assert pc.run(str(tmp_path / "exp"))["ok"]
+    assert "build_private" in pc.update(str(tmp_path / "exp"), str(tmp_path / "upd"))["error"]
+    assert not (tmp_path / "upd").exists()
+
+
+def test_update_refuses_a_public_history_with_private_files(repo, public, tmp_path):
+    work = tmp_path / "work"
+    subprocess.run(["git", "clone", "-q", str(public), str(work)], check=True)
+    (work / "QUESTIONS.md").write_text("notes\n")
+    env = ["-c", "user.name=x", "-c", "user.email=x@example.com"]
+    subprocess.run(["git", *env, "add", "-A"], cwd=work, check=True)
+    subprocess.run(["git", *env, "commit", "-q", "-m", "oops"], cwd=work, check=True)
+    subprocess.run(["git", *env, "rm", "-q", "QUESTIONS.md"], cwd=work, check=True)
+    subprocess.run(["git", *env, "commit", "-q", "-m", "gone again"], cwd=work, check=True)   # still in history
+    subprocess.run(["git", "push", "-q", "origin", "main"], cwd=work, check=True)
+    assert pc.run(str(tmp_path / "exp"))["ok"]
+    out = pc.update(str(tmp_path / "exp"), str(tmp_path / "upd"))
+    assert out["ok"] is False and "REFUSED" in out["error"] and out["first_hits"][0]["file"] == "QUESTIONS.md"
+    assert _commits(tmp_path / "upd") == "3"                                    # no commit made
+
+
+def test_update_and_make_repo_always_rescan_first(monkeypatch):
+    """An old export still matches its own old scan; --update / --make-repo must rebuild it from today's code first."""
+    from botscope import server
+    calls = []
+    monkeypatch.setattr(pc, "run", lambda out=None, **k: calls.append("run") or {"ok": True})
+    monkeypatch.setattr(pc, "update", lambda out=None, into=None: calls.append("update") or {"ok": True})
+    monkeypatch.setattr(pc, "make_repo", lambda out=None: calls.append("make_repo") or {"ok": True})
+    server.publish_check(how="update")
+    server.publish_check(how="make_repo")
+    assert calls == ["run", "update", "run", "make_repo"]
+    monkeypatch.setattr(pc, "run", lambda out=None, **k: {"ok": False, "note": "x"})
+    calls.clear()
+    assert server.publish_check(how="update")["ok"] is False and calls == []          # a failed scan stops it

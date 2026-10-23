@@ -1172,20 +1172,26 @@ def auto_setup(how: str = "scan", path: str | None = None, bot: str | None = Non
 
 
 @mcp.tool()
-def publish_check(how: str = "check", out: str | None = None, sources: list[str] | None = None) -> dict:
+def publish_check(how: str = "check", out: str | None = None, sources: list[str] | None = None,
+                  into: str | None = None) -> dict:
     """publish-check (local only, nothing is published): how = "check" builds a clean export of the outline from an
     allowlist into a separate folder (default ~/.botscope/publish-export) and scans it for personal info (keys, IPs,
     emails, home paths, Tailscale names, account numbers) and for your own strategies (names, code hashes, rule
     fingerprints from the git-ignored botscope.private.json). how = "build_private" makes that private list from
     `sources` (your strategy files or folders; default botscope.local.json "private"). how = "make_repo" (only after
     a PASS) turns the export into a brand-new git repo with exactly one commit: no history, no remote, nothing pushed;
-    show its to_publish_later commands as they are and never run them. Show the verdict first; on FAIL list the hits
-    by kind. Going public still needs the user's (and a parent's) go-ahead."""
+    show its to_publish_later commands as they are and never run them. how = "update" (only after a PASS) clones the
+    public repo's main into a scratch folder (`into`, default ~/.botscope/publish-update) and makes ONE new commit on
+    top from the export; it never pushes: show its to_publish command and decision as they are and never run it. Show
+    the verdict first; on FAIL list the hits by kind. Going public still needs the user's (and a parent's) go-ahead."""
     from . import publish_check as pc
     if how == "build_private":
         return _safe(pc.build_private, sources)
-    if how == "make_repo":
-        return _safe(pc.make_repo, out)
+    if how in ("make_repo", "update"):          # always from a fresh export of today's code, never a stale one
+        scan = _safe(pc.run, out)
+        if not scan.get("ok"):
+            return {**scan, "note": "Nothing was made: the fresh export didn't PASS. " + str(scan.get("note", ""))}
+        return _safe(pc.make_repo, out) if how == "make_repo" else _safe(pc.update, out, into)
     return _safe(pc.run, out)
 
 
