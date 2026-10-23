@@ -33,9 +33,9 @@ DEFAULT_OUT = Path("~/.botscope/publish-export").expanduser()
 MARKER = ".botscope-export"
 ALLOW = ("botscope/*.py", "botscope/web/*", "botscope/costs.json", "botscope/market_data/*.py", "bots/*.py",
          "skills/*", "skills/*/*", ".claude-plugin/*", "docs/*.md", "tests/*.py", "README.md", "CONTRIBUTING.md",
-         "pyproject.toml", ".env.example", ".gitignore", "LICENSE")
+         "pyproject.toml", ".env.example", ".gitignore", "LICENSE", "uv.lock")
 DENY = ("QUESTIONS.md", "ROADMAP.md", "EXPERIMENTS.md", "factory/*", "reports/*", "data/*", "botscope.local.json",
-        "botscope.private.json", ".env", ".env.*", "uv.lock", "LICENSE.draft")
+        "botscope.private.json", ".env", ".env.*", "LICENSE.draft")
 SHINGLE = 6                        # consecutive meaningful code lines that make one rule fingerprint
 # Images can't be scanned like text, so only these go out: each was looked at by a person (demo data, example bots
 # only, no account, no names, no metadata beyond a colour profile) and is pinned by its sha256. A changed image no
@@ -46,6 +46,7 @@ REVIEWED_IMAGES = {
     "docs/screenshots/studio-desk.jpg": "378ecff97de217951056c1c073996ca7e1b0e7c82488f4797ca4561ac735e72c",
     "docs/screenshots/studio-factory.jpg": "c782b5048898c6c256e286b204ff7eaa891a79257a4990881ba94b14e8dd2fb8",
     "docs/screenshots/studio-factory-phone.jpg": "a374701c41a7a65cb32e72b2a55c6c9cad3ddd3324a1b2924567410f2b183c78",
+    ".claude-plugin/icon.png": "df6f910d5470506b2f029cd220d0810b14646437faf8f003e12e9da9098cf7ef",   # drawn by code: candles in a scope
 }
 _IMAGE_META = (b"Exif", b"xmpmeta", b"tEXt", b"iTXt", b"zTXt")    # camera/GPS/author blocks: none allowed
 _LINK = re.compile(r"""\]\(([^)\s]+)[^)]*\)|\bsrc=["']([^"']+)["']""")

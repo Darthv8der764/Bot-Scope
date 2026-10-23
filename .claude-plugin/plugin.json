@@ -1,25 +1,69 @@
 {
   "name": "botscope",
+  "displayName": "BotScope",
   "version": "0.4.0",
   "description": "Look inside your own trading bots from your own Claude: honest backtests, a live 'what the bot sees' chart, a market desk, and safety rails. Paper trading by default. Not financial advice.",
-  "author": { "name": "BotScope contributors" },
+  "author": { "name": "Darthv8der764", "url": "https://github.com/Darthv8der764" },
+  "homepage": "https://github.com/Darthv8der764/Bot-Scope",
+  "repository": "https://github.com/Darthv8der764/Bot-Scope",
   "license": "LicenseRef-PolyForm-Strict-1.0.0-BotScope",
   "keywords": ["trading", "backtest", "paper-trading", "alpaca", "mcp"],
+  "icon": "./.claude-plugin/icon.png",
+  "userConfig": {
+    "ALPACA_API_KEY": {
+      "type": "string",
+      "title": "Alpaca PAPER Key ID (optional)",
+      "description": "From your free Alpaca paper account (starts with PK). Leave empty to use made-up demo prices, or add it later in Studio's Get started tab. Paper keys only.",
+      "sensitive": true
+    },
+    "ALPACA_SECRET_KEY": {
+      "type": "string",
+      "title": "Alpaca PAPER Secret Key (optional)",
+      "description": "The secret that goes with the Key ID above. Stored in your computer's secure credential store, never in a file.",
+      "sensitive": true
+    },
+    "FINNHUB_API_KEY": {
+      "type": "string",
+      "title": "Finnhub API key (optional)",
+      "description": "Free at finnhub.io: earnings dates and analyst ratings on the Desk.",
+      "sensitive": true
+    },
+    "FRED_API_KEY": {
+      "type": "string",
+      "title": "FRED API key (optional)",
+      "description": "Free at fred.stlouisfed.org: economy panels and the economic calendar on the Desk.",
+      "sensitive": true
+    },
+    "SEC_USER_AGENT": {
+      "type": "string",
+      "title": "SEC contact (optional)",
+      "description": "Your name and email, e.g. 'Jane Doe jane@example.com'. The SEC asks for this on insider-filing requests."
+    }
+  },
   "mcpServers": {
     "botscope": {
       "command": "uv",
-      "args": ["run", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "botscope-mcp"]
+      "args": ["run", "--locked", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "botscope-mcp"],
+      "env": {
+        "ALPACA_API_KEY": "${user_config.ALPACA_API_KEY}",
+        "ALPACA_SECRET_KEY": "${user_config.ALPACA_SECRET_KEY}",
+        "FINNHUB_API_KEY": "${user_config.FINNHUB_API_KEY}",
+        "FRED_API_KEY": "${user_config.FRED_API_KEY}",
+        "SEC_USER_AGENT": "${user_config.SEC_USER_AGENT}"
+      }
     }
   },
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "mcp__alpaca__(place_.*_order|replace_order_by_id|exercise_options_position)",
-        "hooks": [{ "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" botscope-guard" }]
+        "hooks": [{ "type": "command", "command": "uv",
+                    "args": ["run", "--locked", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "botscope-guard"] }]
       },
       {
         "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" python -m botscope.checkpoints" }]
+        "hooks": [{ "type": "command", "command": "uv",
+                    "args": ["run", "--locked", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "botscope.checkpoints"] }]
       }
     ]
   }

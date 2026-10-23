@@ -18,9 +18,18 @@ def _env_file() -> Path:
     return ROOT / ".env" if (ROOT / ".env").is_file() else HOME_ENV.expanduser()
 
 
+def _set(v: str | None) -> str:
+    """A real value: not empty and not an option placeholder left unfilled (e.g. "${user_config.X}")."""
+    v = (v or "").strip()
+    return "" if not v or v.startswith("${") else v
+
+
 def key(name: str) -> str:
-    if os.getenv(name):
-        return os.environ[name].strip()
+    """Your environment first (the plugin passes the values you gave at install), then the plugin's option form
+    (hooks get CLAUDE_PLUGIN_OPTION_<NAME>), then your .env file."""
+    for v in (os.getenv(name), os.getenv("CLAUDE_PLUGIN_OPTION_" + name)):
+        if _set(v):
+            return _set(v)
     f = _env_file()
     if f.is_file():
         for line in f.read_text().splitlines():

@@ -136,3 +136,17 @@ def test_botscope_switches_and_alpaca_keys_can_never_be_set_as_other_keys(_env_f
     assert not setup_guide.save_custom("GOOD_KEY", "line1\nBOTSCOPE_LIVE_TRADING=1")["saved"]
     assert not _env_file.exists() or "BOTSCOPE_LIVE_TRADING" not in _env_file.read_text()
     assert not setup_guide.remove_custom("BOTSCOPE_LIVE_TRADING")["removed"]
+
+
+def test_keys_given_at_plugin_install_are_read(monkeypatch, _env_file):
+    """The plugin asks for keys at install (userConfig): the MCP server gets them as env vars, hooks as
+    CLAUDE_PLUGIN_OPTION_<NAME>; an unfilled option ("" or a left-over ${user_config.X}) falls back to the .env."""
+    from botscope import env
+    _env_file.write_text("FRED_API_KEY=fromfile\n")
+    monkeypatch.setenv("FRED_API_KEY", "${user_config.FRED_API_KEY}")
+    assert env.key("FRED_API_KEY") == "fromfile"
+    monkeypatch.setenv("FRED_API_KEY", "")
+    monkeypatch.setenv("CLAUDE_PLUGIN_OPTION_FRED_API_KEY", "fromhook")
+    assert env.key("FRED_API_KEY") == "fromhook"
+    monkeypatch.setenv("FRED_API_KEY", "fromserver")
+    assert env.key("FRED_API_KEY") == "fromserver"
