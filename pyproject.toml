@@ -1,0 +1,26 @@
+[project]
+name = "botscope"
+version = "0.1.0"
+description = "Look inside your own trading bots from your own Claude. Paper trading by default. Not financial advice."
+requires-python = ">=3.10"
+license = "LicenseRef-PolyForm-Strict-1.0.0-BotScope"
+license-files = ["LICENSE"]
+dependencies = ["mcp>=2.3", "alpaca-py>=0.33", "certifi"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+botscope = "botscope.cli:main"
+botscope-mcp = "botscope.server:main"
+botscope-guard = "botscope.guard:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["botscope*"]
+
+[tool.setuptools.package-data]
+botscope = ["costs.json", "market_data/README.md", "web/*.html", "web/*.js"]

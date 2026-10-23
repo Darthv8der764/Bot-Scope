@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Weather Calendar</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --accent: #3b6fd8; --chip: #efeee9;
+  --w-up: #1a9e6a; --w-down: #d97a2b; --w-chop: #9a9a94; --w-panic: #d64545; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --accent: #6d97ee; --chip: #262624;
+  --w-up: #2fbf86; --w-down: #e58c43; --w-chop: #6b6b66; --w-panic: #ef6363; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --accent: #6d97ee; --chip: #262624;
+  --w-up: #2fbf86; --w-down: #e58c43; --w-chop: #6b6b66; --w-panic: #ef6363; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 20px; margin: 0 0 2px; } .muted { color: var(--muted); font-size: 13px; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); max-width: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; margin: 8px 0 14px; }
+.legend span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+.month { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.month h2 { font-size: 14px; margin: 0 0 8px; }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.dow { font-size: 11px; color: var(--muted); text-align: center; }
+a.day { display: block; text-decoration: none; color: #fff; border-radius: 6px; padding: 4px 0; text-align: center; font-size: 13px; font-weight: 600; background: var(--c); line-height: 1.2; }
+a.day small { display: block; font-weight: 400; font-size: 10px; opacity: .9; }
+a.day:focus-visible, a.day:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.empty { visibility: hidden; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Weather calendar</h1>
+  <div class="muted" id="sub">Loading…</div>
+  <div class="bar"><label class="muted" for="bot">Replay with</label> <select id="bot"></select>
+    <label class="muted" for="months">Months</label> <select id="months"><option>3</option><option selected>6</option><option>12</option></select></div>
+  <div class="legend" id="legend"></div>
+  <div id="cal"></div>
+  <p class="muted" id="note"></p>
+</main>
+<script>
+const W = { "trending up": "var(--w-up)", "trending down": "var(--w-down)", "choppy": "var(--w-chop)", "panic": "var(--w-panic)" };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const $ = id => document.getElementById(id);
+let bots = [], data = null;
+function link(day) {
+  const b = bots.find(x => x.id === $("bot").value) || bots[0];
+  return b ? `/?bot=${encodeURIComponent(b.id)}&symbol=${encodeURIComponent(b.symbol)}&day=${day}` : `/?day=${day}`;
+}
+function draw() {
+  if (!data) return;
+  const byMonth = {};
+  data.days.forEach(d => (byMonth[d.day.slice(0, 7)] ||= []).push(d));
+  $("cal").innerHTML = Object.keys(byMonth).sort().reverse().map(m => {
+    const ds = byMonth[m], first = new Date(ds[0].day + "T12:00:00"), pad = Math.max(0, first.getDay() - 1);
+    const name = first.toLocaleString("en-US", { month: "long", year: "numeric" });
+    return `<div class="month"><h2>${name}</h2><div class="grid">${["Mon", "Tue", "Wed", "Thu", "Fri"].map(x => `<div class="dow">${x}</div>`).join("")}
+      ${"<div class=empty></div>".repeat(pad)}${fill(ds)}</div></div>`;
+  }).join("");
+  if (window.botscopeReadable) botscopeReadable(document.querySelectorAll("a.day"));   // black or white per tile color
+}
+function fill(ds) {
+  let out = "", prev = null;
+  ds.forEach(d => {
+    const dt = new Date(d.day + "T12:00:00");
+    if (prev) { let gap = 0, x = new Date(prev); x.setDate(x.getDate() + 1);
+      while (x < dt) { if (x.getDay() > 0 && x.getDay() < 6) gap++; x.setDate(x.getDate() + 1); }
+      out += "<div class=empty></div>".repeat(gap); }   // market holidays keep their weekday slot
+    const p = d.spy_pct;
+    out += `<a class="day" style="--c:${W[d.weather] || "var(--muted)"}" href="${link(d.day)}" target="_blank" rel="noopener" title="${esc(d.day)}: ${esc(d.weather)} at the open; SPY ${p > 0 ? "+" : ""}${p}% that day">${dt.getDate()}<small>${p > 0 ? "+" : ""}${p.toFixed(1)}%</small></a>`;
+    prev = dt;
+  });
+  return out;
+}
+function load() {
+  $("sub").textContent = "Loading…";
+  fetch("/api/weather_calendar?months=" + $("months").value).then(r => r.json()).then(d => {
+    if (d.error) { $("sub").textContent = d.error; return; }
+    data = d;
+    $("sub").textContent = `${d.from} to ${d.to} · ${d.days.length} trading days · ${d.source}`;
+    $("legend").innerHTML = Object.keys(W).map(k => `<span style="--c:${W[k]}">${k} (${d.counts[k] || 0})</span>`).join("");
+    $("note").textContent = d.note; draw();
+  }).catch(e => { $("sub").textContent = "Couldn't load: " + e; });
+}
+fetch("/api/bots").then(r => r.json()).then(d => {
+  bots = (Array.isArray(d) ? d : d.bots || []).map(b => ({ id: b.id, symbol: (b.symbols || [b.symbol || "SPY"])[0] }));
+  $("bot").innerHTML = bots.map(b => `<option value="${esc(b.id)}">${esc(b.id)} (${esc(b.symbol)})</option>`).join("");
+  const want = new URLSearchParams(location.search).get("bot"); if (want) $("bot").value = want;
+  draw();
+});
+$("bot").onchange = draw; $("months").onchange = load; load();
+</script>
+</body>
+</html>

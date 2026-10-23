@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>BotScope Project Map</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --chip: #efeee9; --accent: #3b6fd8;
+  --edge: #c9c8c2;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --chip: #262624; --accent: #6d97ee; --edge: #3a3a37;
+} }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --chip: #262624; --accent: #6d97ee; --edge: #3a3a37; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; }
+button, select, input { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.muted { color: var(--muted); font-size: 12px; }
+main { display: grid; grid-template-columns: 1fr 300px; min-height: calc(100vh - 56px); }
+#stage { position: relative; min-width: 0; }
+svg { width: 100%; height: calc(100vh - 110px); display: block; }
+aside { border-left: 1px solid var(--line); background: var(--panel); padding: 12px; overflow: auto; }
+aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.legend label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.legend input[type=color] { width: 22px; height: 22px; padding: 0; border: 0; background: none; }
+text { fill: var(--ink); font-size: 11px; pointer-events: none; }
+.node { cursor: grab; outline: none; touch-action: none; }
+.node:focus { outline: none; }
+.node:focus-visible > :first-child { stroke: var(--ink); stroke-width: 2; }
+.node.sel > :first-child { stroke: var(--ink); stroke-width: 2; }
+svg.dragging, svg.dragging .node { cursor: grabbing; }
+svg { touch-action: none; -webkit-tap-highlight-color: transparent; }
+.node.dim { opacity: .15; }
+.edge { stroke: var(--edge); stroke-width: 1; }
+.edge.hi { stroke: var(--accent); stroke-width: 2; }
+.fam { padding: 10px 16px; overflow: auto; }
+.famrow { display: flex; align-items: center; gap: 0; margin: 14px 0; }
+.famrow .name { width: 170px; flex: none; font-weight: 600; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel); cursor: pointer; flex: none; }
+.dot.last { background: var(--accent); }
+.wire { height: 2px; width: 48px; background: var(--edge); flex: none; }
+@media (max-width: 720px) { main { grid-template-columns: 1fr; } aside { border-left: 0; border-top: 1px solid var(--line); } svg { height: 60vh; } .famrow .name { width: 110px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Project map</h1>
+  <button id="t-project" class="on" type="button">Project</button>
+  <button id="t-bots" type="button">Bot family</button>
+  <span class="muted" id="meta">Reading your files and git history…</span>
+</header>
+<div class="bar" id="pbar">
+  <button id="play" type="button" title="Watch the project get built, commit by commit">▶ Timelapse</button>
+  <input id="when" type="range" min="0" max="0" value="0" aria-label="Show the project as it was at this point" style="flex:1;min-width:120px">
+  <span class="muted" id="whenl"></span>
+  <select id="shape" aria-label="Dot shape"><option value="circle">Circles</option><option value="square">Squares</option><option value="hex">Hexagons</option></select>
+  <select id="edges" aria-label="Connectors"><option value="straight">Straight lines</option><option value="curved">Curved lines</option><option value="none">No lines</option></select>
+  <label class="muted"><input type="checkbox" id="labels" checked> Labels</label>
+  <button id="reset" type="button">Reset look</button>
+</div>
+<main id="pmain">
+  <div id="stage"><svg id="svg" role="img" aria-label="Graph of BotScope's modules and which ones use each other"></svg></div>
+  <aside>
+    <div class="legend" id="legend"></div>
+    <div id="info" style="position:relative"><p class="muted">Click a dot to see what that part does. Lines = "uses". Dot size = lines of code.</p></div>
+  </aside>
+</main>
+<div id="bmain" class="fam" hidden></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const GROUPS = {
+  "Core": ["bot", "backtest", "data", "loader", "journal", "env", "settings"],
+  "See inside": ["view", "teach", "whatif", "veto_rules"],
+  "Honesty": ["report", "luck", "label", "drift", "confidence", "arena", "weather", "recap", "mirror"],
+  "Safety": ["guard", "graduation", "preflight", "checkpoints", "redteam"],
+  "Market desk": ["desk", "risk", "account"],
+  "Plumbing": ["server", "cli", "daily_log", "scaffold", "projmap"],
+};
+const DEFAULT_COLORS = { "Core": "#3b6fd8", "See inside": "#8a3ffc", "Honesty": "#1a9e6a", "Safety": "#d64545", "Market desk": "#c27c0e", "Plumbing": "#8d8d88" };
+const groupOf = (id) => Object.keys(GROUPS).find((g) => GROUPS[g].includes(id)) || "Plumbing";
+const KEY = "botscope-map-look-v1";
+let look = { colors: { ...DEFAULT_COLORS }, shape: "circle", edges: "straight", labels: true };
+try { look = { ...look, ...JSON.parse(localStorage.getItem(KEY) || "{}") }; } catch (e) { /* default look */ }
+const saveLook = () => { try { localStorage.setItem(KEY, JSON.stringify(look)); } catch (e) { /* not saved */ } };
+let M, nodes, links, times = [], cutoff = Infinity, timer = null, selected = null;
+
+// Obsidian-style live graph: dots keep settling (repel all, pull linked, gentle pull to the centre), you can drag any
+// dot and the rest follow, click empty space to close the info box. The DOM is built once per redraw; each frame only
+// moves things (fast).
+const W = 900, H = 640;
+let alpha = 0, raf = 0, els = [], edgeEls = [], drag = null;
+
+function layout() {
+  nodes.forEach((n, i) => { const a = i / nodes.length * Math.PI * 2; n.x = W / 2 + Math.cos(a) * 250; n.y = H / 2 + Math.sin(a) * 220; n.vx = 0; n.vy = 0; });
+  $("svg").setAttribute("viewBox", `0 0 ${W} ${H}`);
+  for (let i = 0; i < 120; i++) step(1 - i / 160);          // settle most of the way before the first paint
+  alpha = 0.3; kick();
+}
+
+function step(k) {
+  const vis = nodes.filter((n) => n.shown !== false);
+  for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+    const a = vis[i], b = vis[j], dx = a.x - b.x, dy = a.y - b.y, d2 = Math.max(dx * dx + dy * dy, 25), f = 110 / d2 * k;
+    a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+  }
+  for (const l of links) {
+    const dx = l.t.x - l.s.x, dy = l.t.y - l.s.y, d = Math.sqrt(dx * dx + dy * dy) || 1, f = (d - 110) * 0.02 * k;
+    l.s.vx += dx / d * f; l.s.vy += dy / d * f; l.t.vx -= dx / d * f; l.t.vy -= dy / d * f;
+  }
+  for (const n of nodes) {
+    n.vx += (W / 2 - n.x) * 0.012 * k; n.vy += (H / 2 - n.y) * 0.012 * k;
+    if (n === drag?.n || n.pinned) { n.vx = n.vy = 0; continue; }   // a dropped dot stays where you put it
+    n.vx *= 0.6; n.vy *= 0.6;
+    n.x = Math.max(20, Math.min(W - 20, n.x + n.vx)); n.y = Math.max(20, Math.min(H - 20, n.y + n.vy));
+  }
+}
+
+function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+function frame() {
+  raf = 0;
+  if (alpha < 0.005 && !drag) return;
+  step(alpha); alpha *= drag ? 1 : 0.97; place();
+  kick();
+}
+
+function place() {
+  els.forEach(([g, n]) => g.setAttribute("transform", `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`));
+  edgeEls.forEach(([e, l]) => {
+    if (e.tagName === "line") { e.setAttribute("x1", l.s.x); e.setAttribute("y1", l.s.y); e.setAttribute("x2", l.t.x); e.setAttribute("y2", l.t.y); }
+    else e.setAttribute("d", `M${l.s.x},${l.s.y} Q${(l.s.x + l.t.x) / 2 + (l.t.y - l.s.y) * 0.2},${(l.s.y + l.t.y) / 2 - (l.t.x - l.s.x) * 0.2} ${l.t.x},${l.t.y}`);
+  });
+}
+
+function shape(r, color) {
+  if (look.shape === "square") return `<rect x="${-r}" y="${-r}" width="${2 * r}" height="${2 * r}" rx="3" fill="${color}"/>`;
+  if (look.shape === "hex") return `<polygon points="${[0, 1, 2, 3, 4, 5].map((i) => `${r * Math.cos(i * Math.PI / 3)},${r * Math.sin(i * Math.PI / 3)}`).join(" ")}" fill="${color}"/>`;
+  return `<circle r="${r}" fill="${color}"/>`;
+}
+
+function draw() {
+  const vis = (n) => !n.added || Date.parse(n.added) <= cutoff;
+  nodes.forEach((n) => { n.shown = vis(n); });
+  const near = selected ? new Set([selected.id, ...links.filter((l) => l.s === selected || l.t === selected).flatMap((l) => [l.s.id, l.t.id])]) : null;
+  const shownLinks = look.edges === "none" ? [] : links.filter((l) => vis(l.s) && vis(l.t));
+  const hi = (l) => selected && (l.s === selected || l.t === selected) ? " hi" : "";
+  $("svg").innerHTML = shownLinks.map((l) => look.edges === "curved" ? `<path class="edge${hi(l)}" fill="none"/>` : `<line class="edge${hi(l)}"/>`).join("") +
+    nodes.filter(vis).map((n) => { const r = 6 + Math.sqrt(n.lines) / 2.2;
+      return `<g class="node${near && !near.has(n.id) ? " dim" : ""}${selected === n ? " sel" : ""}" data-id="${n.id}" tabindex="0" role="button" aria-label="${esc(n.id)}: ${esc(n.doc)}">${shape(r, look.colors[groupOf(n.id)])}${look.labels ? `<text y="${r + 12}" text-anchor="middle">${esc(n.id)}</text>` : ""}<title>${esc(n.id)}: ${esc(n.doc)}</title></g>`; }).join("");
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  els = [...$("svg").querySelectorAll(".node")].map((g) => [g, byId[g.dataset.id]]);
+  edgeEls = [...$("svg").querySelectorAll(".edge")].map((e, i) => [e, shownLinks[i]]);
+  els.forEach(([g, n]) => { g.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(n); } }; });
+  place();
+  const shown = nodes.filter(vis).length;
+  $("whenl").textContent = cutoff === Infinity ? `now · ${shown} parts` : `${new Date(cutoff).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · ${shown} parts`;
+}
+
+const INFO_EMPTY = `<p class="muted">Click a dot to see what that part does. Drag dots to move them. Lines = "uses". Dot size = lines of code.</p>`;
+function pick(n) { selected = n; if (n) showInfo(); else $("info").innerHTML = INFO_EMPTY; draw(); }
+function svgPoint(e) { const p = $("svg").createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform($("svg").getScreenCTM().inverse()); }
+$("svg").addEventListener("pointerdown", (e) => {
+  const g = e.target.closest(".node");
+  if (!g) { drag = { empty: true, x: e.clientX, y: e.clientY }; return; }
+  e.preventDefault();
+  const n = nodes.find((x) => x.id === g.dataset.id), p = svgPoint(e);
+  drag = { n, dx: n.x - p.x, dy: n.y - p.y, x: e.clientX, y: e.clientY, moved: false };
+  $("svg").setPointerCapture(e.pointerId); $("svg").classList.add("dragging");
+});
+$("svg").addEventListener("pointermove", (e) => {
+  if (!drag || drag.empty) return;
+  if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) drag.moved = true;
+  if (!drag.moved) return;
+  const p = svgPoint(e);
+  drag.n.x = Math.max(20, Math.min(W - 20, p.x + drag.dx)); drag.n.y = Math.max(20, Math.min(H - 20, p.y + drag.dy));
+  alpha = Math.max(alpha, 0.25); place(); kick();
+});
+const endDrag = (e) => {
+  if (!drag) return;
+  const d = drag; drag = null; $("svg").classList.remove("dragging");
+  if (d.empty) { if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) <= 4 && selected) pick(null); return; }   // click on empty space closes the info
+  if (!d.moved && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 4) {   // a fast flick: drop it where it ended
+    const p = svgPoint(e); d.n.x = Math.max(20, Math.min(W - 20, p.x + d.dx)); d.n.y = Math.max(20, Math.min(H - 20, p.y + d.dy));
+    d.moved = true; alpha = Math.max(alpha, 0.25); place();
+  }
+  if (d.moved) d.n.pinned = true; else pick(d.n);
+  kick();
+};
+$("svg").addEventListener("pointerup", endDrag);
+$("svg").addEventListener("pointercancel", () => { drag = null; $("svg").classList.remove("dragging"); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && selected) pick(null); });
+
+function showInfo() {
+  const n = selected, uses = links.filter((l) => l.s === n).map((l) => l.t.id), usedBy = links.filter((l) => l.t === n).map((l) => l.s.id);
+  $("info").innerHTML = `<button type="button" class="bs-x" aria-label="Close the info box" title="Close (Esc)">×</button><h2>${esc(n.id)}.py <span class="muted">· ${esc(groupOf(n.id))}</span></h2><p>${esc(n.doc)}</p>
+    <p class="muted">${n.lines} lines${n.added ? ` · added ${esc(n.added.slice(0, 16).replace("T", " "))}` : " · not committed yet"}</p>
+    ${n.tools.length ? `<h2>Claude tools</h2><p>${n.tools.map(esc).join(", ")}</p>` : ""}
+    <h2>Uses</h2><p class="muted">${uses.map(esc).join(", ") || "nothing else"}</p>
+    <h2>Used by</h2><p class="muted">${usedBy.map(esc).join(", ") || "nothing (an entry point)"}</p>
+    <button type="button" id="clear">Show everything</button>`;
+  $("clear").onclick = () => pick(null);
+  $("info").querySelector(".bs-x").onclick = () => pick(null);
+}
+
+function legend() {
+  $("legend").innerHTML = Object.keys(GROUPS).map((g) => `<label><input type="color" data-g="${g}" value="${look.colors[g]}" aria-label="Color for ${g}">${g}</label>`).join("");
+  $("legend").querySelectorAll("input").forEach((i) => i.oninput = () => { look.colors[i.dataset.g] = i.value; saveLook(); draw(); });
+  $("shape").value = look.shape; $("edges").value = look.edges; $("labels").checked = look.labels;
+}
+
+function family() {
+  $("bmain").innerHTML = M.bots.map((b) => `<div class="famrow"><span class="name">${esc(b.name)}<div class="muted">${esc(b.timeframe)} · ${esc(b.status)}</div></span>
+    ${b.versions.map((v, i) => `${i ? '<span class="wire"></span>' : ""}<button class="dot${i === b.versions.length - 1 ? " last" : ""}" type="button" data-b="${esc(b.id)}" data-i="${i}" title="v${esc(v.version)}: ${esc(v.change)}" aria-label="${esc(b.name)} change ${i + 1}: ${esc(v.change)}"></button>`).join("")}</div>`).join("") +
+    `<div id="finfo" class="muted">Click a dot: what changed in that version and, for the newest one, how it did (untested trades, confidence).</div>`;
+  $("bmain").querySelectorAll(".dot").forEach((d) => d.onclick = () => {
+    const b = M.bots.find((x) => x.id === d.dataset.b), v = b.versions[+d.dataset.i];
+    $("finfo").innerHTML = `<b>${esc(b.name)} v${esc(v.version)}</b> · ${esc(v.commit)} ${v.when ? "· " + esc(v.when.slice(0, 16).replace("T", " ")) : ""}<br>${esc(v.change)}` +
+      ("confidence" in v ? `<br>Latest saved results: ${v.untested_trades ?? "no"} untested trades${v.untested_avg_r != null ? `, ${v.untested_avg_r > 0 ? "+" : ""}${v.untested_avg_r}R each` : ""} · confidence ${esc(v.confidence)}` : "");
+  });
+}
+
+function tab(which) {
+  const p = which === "project";
+  $("t-project").classList.toggle("on", p); $("t-bots").classList.toggle("on", !p);
+  $("pmain").hidden = !p; $("pbar").hidden = !p; $("bmain").hidden = p;
+}
+
+fetch("/api/map").then((r) => r.json()).then((data) => {
+  M = data;
+  nodes = M.project.nodes.map((n) => ({ ...n }));
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  links = M.project.links.filter((l) => byId[l.source] && byId[l.target]).map((l) => ({ s: byId[l.source], t: byId[l.target] }));
+  times = [...new Set(nodes.filter((n) => n.added).map((n) => Date.parse(n.added)))].sort((a, b) => a - b);
+  $("when").max = times.length; $("when").value = times.length;
+  $("meta").textContent = `${nodes.length} parts · ${links.length} connections · ${M.commits} commits`;
+  layout(); legend(); draw(); family();
+}).catch((e) => { $("info").innerHTML = `<p class="muted">Could not load: ${esc(e.message)}</p>`; });
+
+$("when").oninput = () => { const i = +$("when").value; cutoff = i >= times.length ? Infinity : times[i]; draw(); alpha = Math.max(alpha, 0.1); kick(); };
+$("play").onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; $("play").textContent = "▶ Timelapse"; return; }
+  $("when").value = 0; $("play").textContent = "❚❚ Pause";
+  timer = setInterval(() => { const i = +$("when").value + 1; $("when").value = i; $("when").oninput(); if (i >= times.length) $("play").onclick(); }, 450);
+};
+$("shape").onchange = () => { look.shape = $("shape").value; saveLook(); draw(); };
+$("edges").onchange = () => { look.edges = $("edges").value; saveLook(); draw(); };
+$("labels").onchange = () => { look.labels = $("labels").checked; saveLook(); draw(); };
+$("reset").onclick = () => { nodes.forEach((n) => { n.pinned = false; }); alpha = 0.3; kick(); look = { colors: { ...DEFAULT_COLORS }, shape: "circle", edges: "straight", labels: true }; saveLook(); legend(); draw(); };
+$("t-project").onclick = () => tab("project"); $("t-bots").onclick = () => tab("bots");
+</script>
+</body>
+</html>

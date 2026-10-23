@@ -1,0 +1,16 @@
+{
+  "name": "botscope",
+  "owner": {
+    "name": "BotScope contributors"
+  },
+  "metadata": {
+    "description": "BotScope: free for personal use, tools to look inside your own trading bots. Paper by default."
+  },
+  "plugins": [
+    {
+      "name": "botscope",
+      "source": "./",
+      "description": "Honest backtests, a live bot chart, a market desk and safety rails for your own trading bots. Paper by default. Not financial advice."
+    }
+  ]
+}

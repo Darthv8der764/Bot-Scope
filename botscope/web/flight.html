@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<title>Flight Simulator</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --line: #e3e2dd; --accent: #2f6fde; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, system-ui, sans-serif; padding: 12px 16px 40px; max-width: 900px; }
+header { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+h1 { font-size: 18px; margin: 0; } .muted { color: var(--muted); font-size: 12px; }
+#chart { height: 360px; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+button, input, select { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+button { cursor: pointer; } button:disabled { opacity: .45; cursor: default; }
+button.buy { border-color: var(--up); } button.sell { border-color: var(--down); }
+input { width: 72px; } #sym { width: 10ch; min-width: 10ch; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.up { color: var(--up); } .down { color: var(--down); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; } td, th { text-align: left; padding: 4px 6px; border-top: 1px solid var(--line); }
+@media (max-width: 600px) { body { padding: 10px 12px 40px; } #chart { height: 300px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Flight simulator</h1>
+  <span class="muted" id="what"></span>
+</header>
+<p class="muted">Trade a past day yourself. Only finished candles are shown; the rest of the day, and what the bot did, stay hidden until the end. Paper only, same costs as every BotScope test.</p>
+<form class="row" id="pick"><input id="sym" aria-label="Symbol" placeholder="SPY"><input id="day" type="date" aria-label="Day" style="width:auto"><button>Load day</button></form>
+<div id="chart"></div>
+<div class="row">
+  <button id="next" type="button">Next candle</button><button id="next5" type="button">+5</button>
+  <button id="buy" class="buy" type="button">Buy</button><button id="short" class="sell" type="button">Short</button>
+  <button id="close" type="button" disabled>Close</button>
+  <label class="muted">Stop % <input id="stop" type="number" min="0.1" step="0.1" aria-label="Stop percent"></label>
+  <button id="end" type="button">End the day</button>
+</div>
+<p class="muted" id="status" role="status"></p>
+<div id="result"></div>
+<div class="muted" style="margin-top:14px">Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a>. Not financial advice.</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const q = new URLSearchParams(location.search);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let D = null, i = 0, pos = null, mine = [], series, chart, over = false;
+const ts = (iso) => Math.floor(new Date(iso).getTime() / 1000) - new Date(iso).getTimezoneOffset() * 60;   // wall-clock axis
+const pct = (x) => `<span class="${x > 0 ? "up" : x < 0 ? "down" : ""}">${x > 0 ? "+" : ""}${x.toFixed(2)}%</span>`;
+
+function makeChart() {
+  chart = LightweightCharts.createChart($("chart"), { autoSize: true,
+    layout: { background: { color: css("--panel") }, textColor: css("--muted") },
+    grid: { vertLines: { color: css("--line") }, horzLines: { color: css("--line") } },
+    timeScale: { timeVisible: D.timeframe !== "1Day" } });
+  series = chart.addCandlestickSeries({ upColor: css("--up"), downColor: css("--down"), wickUpColor: css("--up"),
+    wickDownColor: css("--down"), borderVisible: false });
+}
+function draw() {
+  series.setData(D.candles.slice(0, i + 1).map((c) => ({ time: ts(c.t), open: c.o, high: c.h, low: c.l, close: c.c })));
+  const marks = mine.flatMap((t) => [{ time: ts(t.t_in), position: t.side === "long" ? "belowBar" : "aboveBar", color: css("--accent"), shape: t.side === "long" ? "arrowUp" : "arrowDown", text: "YOU" },
+    ...(t.t_out ? [{ time: ts(t.t_out), position: "aboveBar", color: css("--accent"), shape: "circle", text: `${t.pct > 0 ? "+" : ""}${t.pct.toFixed(2)}%` }] : [])]);
+  if (pos) marks.push({ time: ts(pos.t_in), position: pos.side === "long" ? "belowBar" : "aboveBar", color: css("--accent"), shape: pos.side === "long" ? "arrowUp" : "arrowDown", text: "YOU" });
+  if (over) for (const t of D.bot_trades) {
+    marks.push({ time: ts(t.t_in), position: t.side === "long" ? "belowBar" : "aboveBar", color: "#b45309", shape: t.side === "long" ? "arrowUp" : "arrowDown", text: "BOT" });
+    if (t.t_out) marks.push({ time: ts(t.t_out), position: "aboveBar", color: "#b45309", shape: "circle", text: `bot ${t.pct > 0 ? "+" : ""}${t.pct.toFixed(2)}%` });
+  }
+  marks.sort((a, b) => a.time - b.time);
+  series.setMarkers(marks);
+  const c = D.candles[i];
+  $("status").innerHTML = `${esc(c.t.replace("T", " ").slice(0, 16))} · close ${c.c.toFixed(2)}` + (pos ? ` · you are ${pos.side} from ${pos.entry.toFixed(2)}, stop ${pos.stop.toFixed(2)}, now ${pct(live(c.c))}` : " · no position");
+  $("close").disabled = !pos || over; $("buy").disabled = $("short").disabled = !!pos || over;
+  $("next").disabled = $("next5").disabled = $("end").disabled = over;
+}
+function live(px) { const d = pos.side === "long" ? 1 : -1; return d * (px - pos.entry) / pos.entry * 100 - D.cost_pct; }
+function exit(px, why, stopped) {
+  const d = pos.side === "long" ? 1 : -1, fill = px * (1 - d * (stopped ? D.stop_extra_pct : 0) / 100);
+  mine.push({ ...pos, t_out: D.candles[i].t, exit: fill, why, pct: d * (fill - pos.entry) / pos.entry * 100 - D.cost_pct });
+  pos = null;
+}
+function step(n) {
+  for (let k = 0; k < n && i < D.candles.length - 1; k++) {
+    i++;
+    const c = D.candles[i];
+    if (pos && ((pos.side === "long" && c.l <= pos.stop) || (pos.side === "short" && c.h >= pos.stop)))
+      exit(pos.side === "long" ? Math.min(c.o, pos.stop) : Math.max(c.o, pos.stop), "stop hit", true);
+  }
+  if (i >= D.candles.length - 1) return finish();
+  draw();
+}
+function enter(side) {
+  const c = D.candles[i], s = Math.max(0.1, parseFloat($("stop").value) || 1) / 100;
+  pos = { side, entry: c.c, t_in: c.t, stop: side === "long" ? c.c * (1 - s) : c.c * (1 + s) };
+  draw();
+}
+async function finish() {
+  i = D.candles.length - 1;
+  if (pos) exit(D.candles[i].c, "end of the day", false);
+  over = true; draw();
+  const you = mine.reduce((a, t) => a + t.pct, 0);
+  let saved = {};
+  try {
+    saved = await (await fetch("/api/flight/score", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bot: D.bot_id, symbol: D.symbol, day: D.day, you_pct: +you.toFixed(3), bot_pct: D.bot_pct, hold_pct: D.hold_pct, trades: mine.length }) })).json();
+  } catch { /* the score still shows */ }
+  $("result").innerHTML = `<div class="card"><b>Day over.</b> After costs: you ${pct(you)} over ${mine.length} trade(s) · ${esc(D.bot)} ${pct(D.bot_pct)} over ${D.bot_trades.length} · just holding ${esc(D.symbol)} ${pct(D.hold_pct)}.
+  <table><tr><th>Who</th><th>Side</th><th>In → out</th><th>Result</th><th>Why out</th></tr>
+  ${mine.map((t) => `<tr><td>You</td><td>${t.side}</td><td>${t.entry.toFixed(2)} → ${t.exit.toFixed(2)}</td><td>${pct(t.pct)}</td><td>${esc(t.why)}</td></tr>`).join("")}
+  ${D.bot_trades.map((t) => `<tr><td>Bot</td><td>${t.side}</td><td>${t.entry.toFixed(2)} → ${t.exit.toFixed(2)}</td><td>${pct(t.pct)}</td><td>${esc(t.why_out)}</td></tr>`).join("")}</table>
+  <p class="muted">${esc(saved.summary || "")}${saved.summary ? ". " : ""}One day is mostly luck, for you and for the bot: play several days before reading anything into it. ${esc(D.note)}</p></div>`;
+}
+async function load(sym, day) {
+  const u = new URLSearchParams({ bot: q.get("bot") || "first_hour_breakout" });
+  if (sym) u.set("symbol", sym); if (day) u.set("day", day);
+  const r = await fetch("/api/flight?" + u), d = await r.json();
+  if (!r.ok || d.error) { $("status").innerHTML = `<span class="down">${esc(d.error || r.statusText)}</span>`; return; }
+  D = d; i = d.start; pos = null; mine = []; over = false; $("result").innerHTML = "";
+  $("what").textContent = `${d.bot} · ${d.symbol} · ${d.day} · ${d.timeframe} · ${d.source}`;
+  $("sym").value = d.symbol; $("day").value = d.day;
+  if (!$("stop").value) $("stop").value = d.timeframe === "1Day" ? 3 : 0.5;
+  if (chart) chart.remove();
+  makeChart(); draw(); chart.timeScale().fitContent();
+}
+$("next").onclick = () => step(1); $("next5").onclick = () => step(5);
+$("buy").onclick = () => enter("long"); $("short").onclick = () => enter("short");
+$("close").onclick = () => { exit(D.candles[i].c, "you closed it", false); draw(); };
+$("end").onclick = finish;
+$("pick").onsubmit = (e) => { e.preventDefault(); load($("sym").value.trim().toUpperCase(), $("day").value); };
+document.addEventListener("keydown", (e) => { if (e.target.tagName !== "INPUT" && e.key === "ArrowRight" && !over && D) step(1); });
+load(q.get("symbol"), q.get("day"));
+</script>
+</body>
+</html>

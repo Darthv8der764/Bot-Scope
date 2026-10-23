@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>BotScope Studio</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --line: #e3e2dd; --accent: #2f6fde; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px 6px; }
+h1 { font-size: 18px; margin: 0; } .muted { color: var(--muted); font-size: 12px; }
+select, input, button { font: inherit; color: inherit; }
+select, input { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+nav { display: flex; gap: 4px; overflow-x: auto; padding: 0 16px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 10px; white-space: nowrap; color: var(--muted); }
+nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+main { flex: 1; position: relative; min-height: 0; }
+main > iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
+.pane { position: absolute; inset: 0; overflow: auto; padding: 12px 16px 60px; max-width: 900px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.card h2 { font-size: 15px; margin: 0 0 2px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 8px; }
+th, td { text-align: left; padding: 5px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); }
+.lvl { display: inline-block; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: 12px; white-space: nowrap; }
+form.run { display: flex; gap: 8px; flex-wrap: wrap; } form.run input { flex: 1 1 220px; min-width: 0; }
+.err { color: var(--down); }
+.pane a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.welcome { margin: 0 16px 8px; padding: 10px 12px; border: 1px solid #b45309; border-radius: 10px; background: var(--panel); font-size: 13px; }
+.welcome ol { margin: 4px 0; padding-left: 20px; } .welcome a { color: inherit; text-decoration: underline; } .welcome button { float: right; margin-left: 8px; }
+.pane.compare { max-width: none; }
+table.heat td { text-align: center; min-width: 64px; } table.heat th { white-space: nowrap; }
+table.heat td .muted { color: inherit; opacity: .8; }   /* the trade count follows the cell's readable text color */
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pair select { width: 100%; margin-bottom: 6px; }
+.pair iframe { width: 100%; height: 900px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+@media (max-width: 760px) { .pair { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { header { padding: 8px 12px 4px; } nav { padding: 0 8px; } .pane { padding: 10px 12px 60px; }
+  /* survivors: one small card per bot instead of a wide table */
+  table.kept tr:first-child { display: none; }
+  table.kept tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  table.kept td { border: 0; padding: 0; text-align: left; }
+  table.kept td[data-l]::before { content: attr(data-l) ": "; color: var(--muted); font-size: 12px; }
+  table.kept td.name { grid-column: 1 / -1; font-weight: 600; } table.kept td[data-l="Settings ±20%"], table.kept td[data-l="Held-out year"] { grid-column: 1 / -1; } }
+details.strat { border-top: 1px solid var(--line); }
+details.strat > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 8px 2px; cursor: pointer; list-style-position: inside; }
+details.strat > summary:hover { background: var(--bg); }
+details.strat > summary::-webkit-details-marker { display: none; }
+details.strat > summary .sname::before { content: "▸"; display: inline-block; width: 1em; color: var(--muted); transition: transform .15s; }
+details.strat[open] > summary .sname::before { transform: rotate(90deg); }
+details.strat .sname { font-weight: 600; flex: 1 1 260px; }
+details.strat .strades { padding: 0 0 10px; }
+@media (max-width: 600px) {
+  table.trades tr:first-child { display: none; }
+  table.trades tr { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+  table.trades td { border: 0; padding: 0; text-align: left; }
+  table.trades td[data-l]::before { content: attr(data-l) ": "; color: var(--muted); font-size: 12px; } }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+/* ---- console: Claude chat + terminal, docked on the right (a full-height sheet on a phone) ---- */
+.hbtns { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.hbtns button[aria-pressed="true"], .hbtns button[aria-expanded="true"] { border-color: var(--accent); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 5px; vertical-align: 1px; }
+.dot.on { background: var(--up); }
+#work { flex: 1; display: flex; min-height: 0; }
+#work > main { flex: 1; min-width: 0; }
+#dock { width: 420px; max-width: 45vw; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+#dock[hidden] { display: none; }
+.dhead { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.dhead [role="tab"] { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 6px 8px; color: var(--muted); }
+.dhead [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.dhead .x { margin-left: auto; }
+.dbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dbody[hidden] { display: none; }
+.dnote { padding: 12px; font-size: 13px; }
+#msgs { flex: 1; overflow: auto; padding: 8px 10px; font-size: 13px; }
+.msg { margin: 6px 0; padding: 7px 9px; border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.you { background: var(--bg); border: 1px solid var(--line); margin-left: 24px; }
+.msg.claude { border: 1px solid var(--line); margin-right: 12px; }
+.msg code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 0 3px; border-radius: 4px; }
+.msg .tool { display: block; color: var(--muted); font-size: 12px; }
+.msg.err { border-color: var(--down); color: var(--down); }
+#chatform { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
+#chatform textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical; min-height: 54px; }
+#chatform .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+#chatform .row .muted { flex: 1; min-width: 120px; }
+#termbox { flex: 1; min-height: 0; padding: 4px; background: #111; }
+#termbar { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+#settings { position: absolute; right: 16px; top: 48px; z-index: 50; width: min(380px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; box-shadow: 0 4px 18px rgba(0,0,0,.18); font-size: 13px; }
+#settings h2 { font-size: 15px; margin: 0 0 6px; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; flex-wrap: wrap; }
+.switch .state { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+.switch .state.on { color: var(--up); border-color: var(--up); }
+#conswitch { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; padding: 6px 14px; }
+#conswitch[aria-checked="true"] { background: var(--panel); color: var(--ink); border-color: var(--line); }
+#settings .sx { position: absolute; top: 6px; right: 6px; border: 0; background: none; font-size: 18px; line-height: 1; padding: 4px 8px; }
+.confirm { border: 1px solid #b45309; border-radius: 8px; padding: 8px; margin-top: 8px; }
+.confirm .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.confirm .yes { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+@media (max-width: 760px) {
+  #dock { position: fixed; inset: 0; width: auto; max-width: none; z-index: 60; border-left: 0; }
+  body:has(.demo-badge) #chatform, body:has(.demo-badge) #termbar { padding-bottom: 44px; }   /* clear of the DEMO badge */
+  .hbtns { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>BotScope Studio</h1>
+  <label class="muted">Bot <select id="bot" aria-label="Bot for the bot view and playground"></select></label>
+  <span class="muted">Paper only · not financial advice</span>
+  <span class="hbtns">
+    <button type="button" id="consolebtn" aria-expanded="false" aria-controls="dock" title="Claude chat and a terminal, on every tab"><span class="dot" id="cdot"></span>Claude</button>
+    <button type="button" id="setbtn" aria-expanded="false" aria-controls="settings" title="Studio settings">⚙ Settings</button>
+  </span>
+</header>
+<div id="settings" role="dialog" aria-label="Studio settings" hidden data-popup>
+  <h2>Studio settings</h2>
+  <button type="button" class="sx" id="setclose" aria-label="Close settings">×</button>
+  <div class="switch"><span>Claude panel + terminal <span class="state" id="consstate">Off</span></span>
+    <button type="button" id="conswitch" role="switch" aria-checked="false">Switch on</button></div>
+  <p class="muted" id="consnote">Your own Claude Code (<code>claude -p</code>, your own login) and a shell on this computer, on every tab. Off at every launch. Only this page can use them: this computer, this port, a token made fresh at each launch. The live-order guard stays on: paper only.</p>
+  <div id="consconfirm" class="confirm" hidden></div>
+  <p class="err" id="conserr" role="alert"></p>
+</div>
+<div id="welcome" class="welcome" role="note" hidden data-popup data-outside="no"></div>
+<nav role="tablist" aria-label="Studio sections" id="tabs"></nav>
+<div id="work"><main id="main"></main>
+<aside id="dock" aria-label="Claude and terminal" hidden>
+  <div class="dhead" role="tablist" aria-label="Console">
+    <button role="tab" id="dt-chat" aria-selected="true" aria-controls="db-chat">Claude</button>
+    <button role="tab" id="dt-term" aria-selected="false" aria-controls="db-term">Terminal</button>
+    <button type="button" class="x" id="dockclose" aria-label="Close the Claude panel">×</button>
+  </div>
+  <div class="dnote" id="dockoff" hidden>The Claude panel and terminal are <b>off</b> (they're off at every launch). Switch them on in <button type="button" class="linkbtn" id="opensettings">⚙ Settings</button>.</div>
+  <div class="dbody" id="db-chat" role="tabpanel" aria-labelledby="dt-chat">
+    <div id="msgs" aria-live="polite"></div>
+    <form id="chatform">
+      <textarea id="prompt" rows="3" maxlength="8000" aria-label="Message to Claude" placeholder="Ask Claude about what's on this tab…"></textarea>
+      <div class="row"><span class="muted" id="ctx"></span>
+        <button type="button" id="newchat" title="Start a fresh conversation">New chat</button>
+        <button type="button" id="stopchat" hidden>Stop</button>
+        <button type="submit" id="sendchat">Send</button></div>
+    </form>
+  </div>
+  <div class="dbody" id="db-term" role="tabpanel" aria-labelledby="dt-term" hidden>
+    <div id="termbox" aria-label="Terminal"></div>
+    <div id="termbar"><span class="muted" id="termstate">A shell in the botscope folder.</span><button type="button" id="termnew">New shell</button></div>
+  </div>
+</aside></div>
+<footer class="muted purpose" style="padding:12px 16px;font-size:12px">BotScope gives you stock information for your own personal trading decisions. You can also use it with paper trading. It never places real orders for you and isn't financial advice.</footer>
+<script src="/friends.js"></script>
+<script src="/start.js"></script>
+<script src="/optimizer.js"></script>
+<script src="/signals.js"></script>
+<script src="/factory.js"></script>
+<script>
+// BotScope Studio: one page, one style, every BotScope page as a tab. Each tab is the existing page in a frame, loaded
+// the first time it's opened and kept, so switching tabs never loses your place. The Factory tab is native.
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const enc = encodeURIComponent;
+const TABS = [
+  ["start", "Get started", null],
+  ["bot", "Bot view", (b) => `/?bot=${enc(b)}`],
+  ["desk", "Desk", () => "/desk"],
+  ["preflight", "Pre-flight", () => "/preflight"],
+  ["playground", "Rule playground", (b) => `/playground?bot=${enc(b)}`],
+  ["map", "Family tree", () => "/map"],
+  ["factory", "Factory", null],
+  ["compare", "Compare", null],
+  ["optimizer", "Honest optimizer", null],
+  ["imported", "My bots", null],
+  ["signals", "Signals", null],
+  ["friends", "Friends", null],
+  ["flight", "Flight sim", (b) => `/flight?bot=${enc(b)}`],
+  ["tutorial", "Tutorial", () => "/?bot=first_hour_breakout&day=showcase&lesson=1&notour=1"],   // demo: a labeled example day
+];
+const frames = {};
+let current = null;
+
+function bot() { return $("bot").value || "first_hour_breakout"; }
+
+function show(key) {
+  if (!TABS.some(([k]) => k === key)) key = "bot";
+  current = key;
+  for (const b of $("tabs").children) {
+    b.setAttribute("aria-selected", String(b.dataset.k === key));
+    b.tabIndex = b.dataset.k === key ? 0 : -1;
+    if (b.dataset.k === key) b.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+  for (const el of $("main").children) el.hidden = el.dataset.k !== key;
+  if (!frames[key]) {
+    const [, label, url] = TABS.find(([k]) => k === key);
+    let el;
+    if (url) { el = document.createElement("iframe"); el.src = url(bot()); el.title = label; }
+    else { el = document.createElement("div"); el.className = key === "compare" ? "pane compare" : "pane";
+           el.innerHTML = key === "compare" ? compareShell() : key === "optimizer" ? "<div id='opt'></div>" : key === "imported" ? "<div id='imp'></div>" : key === "friends" ? friendsShell() : key === "start" ? startShell() : key === "signals" ? signalsShell() : factoryShell(); }
+    el.dataset.k = key; frames[key] = el; $("main").appendChild(el);
+    if (key === "factory") loadRuns();
+    if (key === "compare") loadCompare();
+    if (key === "optimizer") loadOptimizer();
+    if (key === "imported") loadImported();
+    if (key === "friends") loadFriends();
+    if (key === "start") loadStart();
+    if (key === "signals") loadSignals();
+  }
+  if (location.hash.slice(1) !== key) history.replaceState(null, "", "#" + key);
+  store("botscope-studio-tab", key);
+  if (!$("dock").hidden) ctxDraw();
+}
+
+const HELP = {
+  preflight: "Pre-flight = your daily on/off list: before the bots start, each failed or new strategy asks on or off for today. No answer = yesterday's settings.",
+  optimizer: "Tries a grid of settings and shows how much of the best spot is luck.",
+  factory: "Describe a bot; textbook candidates are tested honestly and only survivors are kept.",
+  map: "How your bots are related: drag the dots, click one for details.",
+  start: "Set up real market data, your bots and Claude, step by step.",
+  friends: "Swap friend codes and compare bots, read-only: numbers only, nothing copied or run.",
+  signals: "Where your own strategies' entry rules fire on today's bars so far, refreshed every minute while the market is open. Paper only: nothing is ever placed.",
+  imported: "Bots you already run, imported read-only: their past trades plus open and past orders. Nothing is ever placed.",
+};
+$("tabs").innerHTML = TABS.map(([k, label]) => `<button role="tab" data-k="${k}" aria-selected="false"${HELP[k] ? ` title="${esc(HELP[k])}"` : ""}>${label}</button>`).join("");
+document.addEventListener("click", (e) => {      // a factory survivor's chart, before adopting it
+  const a = e.target.closest("a[data-cand]");
+  if (!a) return;
+  e.preventDefault();
+  show("bot");
+  frames.bot.src = `/?bot=${enc(a.dataset.cand)}`;
+});
+function store(k, v) { try { localStorage.setItem(k, v); } catch { /* private window: this visit only */ } }
+function stored(k) { try { return localStorage.getItem(k); } catch { return null; } }
+$("tabs").onkeydown = (e) => {                     // arrow keys move between tabs (the usual tab-list keys)
+  const keys = TABS.map(([k]) => k), i = keys.indexOf(current);
+  const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: keys.length - 1 }[e.key];
+  if (j === undefined) return;
+  e.preventDefault();
+  show(keys[(j + keys.length) % keys.length]);
+  [...$("tabs").children].find((b) => b.dataset.k === current).focus();
+};
+$("tabs").onclick = (e) => { const b = e.target.closest("button"); if (b) show(b.dataset.k); };
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+
+$("bot").onchange = () => {          // bot-dependent tabs reload on the new bot; the others keep their place
+  store("botscope-studio-bot", bot());
+  if (!$("dock").hidden) ctxDraw();
+  for (const k of ["bot", "playground", "flight"]) if (frames[k]) frames[k].src = TABS.find(([x]) => x === k)[2](bot());
+};
+
+// ---- Compare tab: two bots' nutrition labels side by side (stacked on a phone), same rows in the same order ----
+let botList = [];
+function compareShell() {
+  const opts = botList.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("");
+  return `<p class="muted">Two nutrition labels side by side: same rows, same order. Rows not measured yet say so.</p>
+  <div class="pair"><div><select id="cmpA" aria-label="First bot">${opts}</select><iframe id="frA" title="First bot's label"></iframe></div>
+  <div><select id="cmpB" aria-label="Second bot">${opts}</select><iframe id="frB" title="Second bot's label"></iframe></div></div>`;
+}
+function loadCompare() {
+  if (!botList.length) return;
+  if (!$("cmpA").dataset.init) {
+    $("cmpA").value = bot(); $("cmpB").value = (botList.find((b) => b.id !== bot()) || botList[0]).id;
+    $("cmpA").dataset.init = "1";
+    $("cmpA").onchange = $("cmpB").onchange = loadCompare;
+  }
+  $("frA").src = `/label?bot=${enc($("cmpA").value)}`; $("frB").src = `/label?bot=${enc($("cmpB").value)}`;
+}
+
+// ---- Optimizer tab: run one (optimizer.js) and the last honest_optimizer heat maps (also from Claude or the CLI) ----
+function heat(v, lo, hi) {                         // green for money made, red for money lost, grey for too few trades
+  if (v == null) return "transparent";
+  const t = v >= 0 ? Math.min(1, v / (hi || 1)) : Math.min(1, v / (lo || -1));
+  const pct = Math.round(15 + 60 * t);            // the theme's up/down colors, so color-blind mode is blue/orange here too
+  return `color-mix(in srgb, var(${v >= 0 ? "--up" : "--down"}) ${pct}%, transparent)`;
+}
+// My bots: imported bots (read-only). Past round trips from the import, plus open and past orders read from the
+// paper account. Nothing here can place, change or cancel an order.
+async function loadImported() {
+  const el = $("imp");
+  el.innerHTML = `<p class="muted">Loading your imported bots…</p>`;
+  let r;
+  try { r = await (await fetch("/api/imported?orders=1")).json(); } catch (e) { el.innerHTML = `<p class="muted">Could not load: ${esc(e.message)}</p>`; return; }
+  const usd = (x) => x == null ? "–" : (x < 0 ? "-$" : "$") + Math.abs(x).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const px = (x) => x == null ? "" : "$" + (+x).toLocaleString(undefined, { maximumFractionDigits: 4 });
+  const ord = (o) => `<tr><td>${esc((o.submitted || "").replace("T", " ").slice(0, 16))}</td><td>${esc(o.symbol)}</td><td>${esc(o.side)}</td><td class="num">${o.qty ?? ""}</td>
+    <td>${esc(o.type || "")}${o.limit != null ? " " + px(o.limit) : ""}${o.stop != null ? " stop " + px(o.stop) : ""}</td><td>${esc(o.status)}</td><td class="num">${o.filled_price != null ? px(o.filled_price) : ""}</td></tr>`;
+  const otable = (rows) => `<div class="tablewrap"><table><tr><th>Sent</th><th>Symbol</th><th>Side</th><th class="num">Qty</th><th>Type</th><th>Status</th><th class="num">Filled at</th></tr>${rows.map(ord).join("")}</table></div>`;
+  const bots = r.bots || [], og = (r.orders && r.orders.bots) || [];
+  const imports = [...new Set(bots.map((b) => b.import))];
+  // One card per import; inside it, one row per strategy. Click a strategy to see its trades (loaded when opened).
+  const strat = (b) => `<details class="strat" data-imp="${esc(b.import)}" data-bot="${esc(b.bot)}"><summary>
+      <span class="sname">${esc(b.bot)}</span>
+      <span><b>${b.trades}</b> trades</span><span>${b.won} won (${Math.round(100 * b.won / (b.trades || 1))}%)</span>
+      <span>avg ${fmtR(b.avg_r)}</span><span class="${b.total_usd > 0 ? "up" : b.total_usd < 0 ? "down" : ""}">${usd(b.total_usd)}</span>
+      <span class="muted">${esc(b.from || "?")} to ${esc(b.to || "?")}</span></summary><div class="strades muted">Loading trades…</div></details>`;
+  const total = (bs) => bs.reduce((a, b) => a + b.total_usd, 0);
+  el.innerHTML = `<div class="card"><h2>My bots (imported, read-only)</h2>
+    <p class="muted">Past trades of bots you already run, by strategy. Click a strategy to see its trades. BotScope only reads them: it never places, changes or cancels an order. Import with Claude: "import my bots from Alpaca" or from a trade-log file.</p></div>` +
+    (imports.length ? imports.map((imp) => {
+      const bs = bots.filter((b) => b.import === imp).sort((x, y) => y.trades - x.trades);
+      return `<div class="card"><h2>${esc(imp)}</h2>
+        <p class="muted">${bs.length} strateg${bs.length === 1 ? "y" : "ies"} · ${bs.reduce((a, b) => a + b.trades, 0)} trades · total ${usd(total(bs))}. Past trades, not a backtest.</p>
+        ${bs.map(strat).join("")}</div>`;
+    }).join("") : `<div class="card"><p class="muted">No imported bots yet.</p></div>`) +
+    `<div class="card"><h2>Orders on your Alpaca paper account</h2>
+    ${r.orders_error ? `<p class="muted">Orders not shown: ${esc(r.orders_error)}</p>` : r.orders ? `<p class="muted">${esc(r.orders.source)}.</p>` : ""}
+    ${og.map((g) => `<h3>Open orders now (${g.open.length})</h3>${g.open.length ? otable(g.open) : `<p class="muted">None open.</p>`}
+      <details><summary>Past orders (${g.past.length}${g.past_total > g.past.length ? ` of ${g.past_total}` : ""})</summary>${g.past.length ? otable(g.past) : `<p class="muted">None in this window.</p>`}</details>`).join("")}</div>`;
+  el.querySelectorAll("details.strat").forEach((d) => d.addEventListener("toggle", async () => {
+    if (!d.open || d.dataset.loaded) return;
+    const box = d.querySelector(".strades");
+    try {
+      const ts = await (await fetch(`/api/imported/trades?import=${enc(d.dataset.imp)}&bot=${enc(d.dataset.bot)}`)).json();
+      d.dataset.loaded = "1"; box.classList.remove("muted");
+      box.innerHTML = `<div class="tablewrap"><table class="trades"><tr><th>Opened</th><th>Closed</th><th>Symbol</th><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">R</th><th class="num">$</th><th>Why it closed</th></tr>
+        ${ts.map((t) => `<tr><td data-l="Opened">${esc(t.opened.replace("T", " ").slice(0, 16))}</td><td data-l="Closed">${esc(t.closed.replace("T", " ").slice(5, 16))}</td><td data-l="Symbol"><b>${esc(t.symbol)}</b></td><td data-l="Side">${esc(t.side)}</td>
+          <td class="num" data-l="Entry">${px(t.entry)}</td><td class="num" data-l="Exit">${px(t.exit)}</td><td class="num" data-l="R">${fmtR(t.r)}</td>
+          <td class="num ${t.pnl > 0 ? "up" : t.pnl < 0 ? "down" : ""}" data-l="$">${usd(t.pnl)}</td><td data-l="Why">${esc(t.why.replaceAll("_", " "))}</td></tr>`).join("")}</table></div>`;
+    } catch (e) { box.textContent = "Could not load the trades: " + e.message; }
+  }));
+}
+
+async function loadOptimizer() {
+  let runs = [];
+  try { runs = await (await fetch("/api/optimizer")).json(); } catch { /* shown as empty */ }
+  const intro = `<div class="card"><h2>What this page does, in plain English</h2>
+  <p>A bot has settings (like "buy when RSI is below 30" or "stop 1% away"). The optimizer tries a grid of nearby
+  settings, and each square is a full backtest on years the settings were not picked on. <b>Bright green</b> made the
+  most per trade, <b>red</b> lost (blue and orange in the color-blind themes), <b>grey</b> had too few trades to judge.</p>
+  <p>The catch: try enough settings and one will look great by luck. So it also checks whether the squares
+  <b>around</b> the best one are good too (a wide plateau is more trustworthy than one bright island), and tests the
+  best square on a <b>held-out year</b> nobody looked at. If the best square loses to today's settings there, the
+  verdict is "keep today's settings". Run one below, or ask Claude to run <code>honest_optimizer</code> on a bot.</p></div><div id="optrun"></div>`;
+  $("opt").innerHTML = intro + (runs.length ? runs.map((o) => {
+    const [a, b] = o.settings, vals = o.grid.flat().filter((c) => c.trades >= 30 && c.avg_r != null && !c.tight_stops).map((c) => c.avg_r);
+    const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+    const isBest = (c) => o.best && c[a] === o.best[a] && c[b] === o.best[b] && (c.avg_r || 0) > 0;   // no star on a losing "best"
+    const isNow = (c) => c[a] === o.today[a] && c[b] === o.today[b];
+    return `<div class="card"><h2>${esc(o.bot)}: ${esc(a)} × ${esc(b)}</h2>
+    <div class="muted">${esc(o.period)} · ${o.cells_tried} settings tried · ${esc(o.symbols.join(", "))} · saved ${esc((o.saved_at || "").slice(0, 10))}</div>
+    <div class="tablewrap"><table class="heat"><tr><th>${esc(a)} \\ ${esc(b)}</th>${o.values[b].map((v) => `<th class="num">${v}</th>`).join("")}</tr>
+    ${o.grid.map((row) => `<tr><th>${row[0][a]}</th>${row.map((c) => `<td class="num" style="background:${c.trades >= 30 && !c.tight_stops ? heat(c.avg_r, lo, hi) : "transparent"}"
+      title="${c.trades} trades${c.tight_stops ? "; stops closer than their costs: R can't be trusted" : ""}">${c.avg_r == null ? "–" : (c.avg_r > 0 ? "+" : "") + c.avg_r.toFixed(2) + "R"}${isBest(c) ? " ★" : ""}${c.tight_stops ? " ⚠" : ""}${isNow(c) ? " •" : ""}<div class="muted">${c.trades}</div></td>`).join("")}</tr>`).join("")}</table></div>
+    <p class="muted">${o.best && (o.best.avg_r || 0) > 0 ? "★ best cell" : "no ★: no cell makes money"} · • today's settings · grey = under 30 trades</p>
+    ${o.luck_in_best ? `<p>${esc(o.luck_in_best)}.</p><p>${esc(o.neighbors.summary)}. Held-out year: best ${o.held_out.best.trades} trades, ${fmtR(o.held_out.best.avg_r)} each; today's ${o.held_out.today.trades} trades, ${fmtR(o.held_out.today.avg_r)} each.</p>` : ""}
+    ${o.tight_stop_cells ? `<p>⚠ ${esc(o.tight_stop_cells)}.</p>` : ""}
+    <p><b>${esc(o.verdict)}.</b></p>
+    <button type="button" class="linkbtn" data-ask="${esc(`Explain the honest optimizer heat map for ${o.bot} (${a} × ${b}, saved ${(o.saved_at || "").slice(0, 10)}) in plain English: is the best square luck, and should I keep today's settings?`)}">Ask Claude about this</button></div>`;
+  }).join("") : `<p class="muted">No heat maps yet. Press Run above, ask Claude "honest optimizer for pullback swing", or run <code>botscope honest_optimizer pullback_swing</code>.</p>`);
+  if (window.botscopeReadable) botscopeReadable(document.querySelectorAll("#opt table.heat td.num"));   // readable on every heat color
+  if (window.optRun) optRun.mount($("optrun"));
+}
+
+// The Factory tab (factoryShell, runCard, the research step) lives in /factory.js.
+const fmtR = (x) => x == null ? "–" : `<span class="${x > 0 ? "up" : x < 0 ? "down" : ""}">${x > 0 ? "+" : ""}${Math.abs(x) < 10 ? x.toFixed(2) : x.toFixed(1)}R</span>`;
+
+fetch("/api/bots").then((r) => r.json()).then((bots) => {
+  botList = bots;
+  // Your own bots first and picked by default; the bot you pick is remembered (this browser only).
+  const opt = (b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`;
+  const mine = bots.filter((b) => b.mine), ex = bots.filter((b) => !b.mine);
+  $("bot").innerHTML = mine.length ? `<optgroup label="My bots">${mine.map(opt).join("")}</optgroup><optgroup label="Examples">${ex.map(opt).join("")}</optgroup>`
+                                   : bots.map(opt).join("");
+  const want = [new URLSearchParams(location.search).get("bot"), stored("botscope-studio-bot"), mine[0]?.id]
+    .find((id) => id && bots.some((b) => b.id === id));
+  if (want) $("bot").value = want;
+}).catch(() => {}).finally(() => show(location.hash.slice(1) || stored("botscope-studio-tab") || "start"));   // first visit: Get started
+
+// Demo mode: a short welcome with three things to try, until it's dismissed (remembered in this browser).
+fetch("/api/mode").then((r) => r.json()).then((m) => {
+  if (!m.demo || stored("botscope-studio-welcome") === "done") return;
+  const w = $("welcome");
+  w.innerHTML = `<button type="button" id="wclose" aria-label="Hide the welcome">Got it</button>
+  <b>You're trying BotScope on made-up prices</b> (DEMO DATA: results mean nothing about real markets). Three things to try:
+  <ol><li><a href="#start">Get started</a>: switch to real market data in about 2 minutes (free, paper only).</li>
+  <li><a href="#factory">Factory</a>: describe a bot, e.g. "a calm daily ETF bot", and see which candidates survive and why.</li>
+  <li><a href="#bot">Bot view</a>: click any candle to see why the bot did or didn't trade there.</li>
+  <li><a href="#preflight">Pre-flight</a>: your daily on/off list. Before the bots start, each failed or new strategy asks on or off for today; no answer keeps yesterday's settings.</li>
+  <li><a href="#tutorial">Tutorial</a>: six hands-on steps, ending with the STOP button.</li></ol>
+  <span class="muted">${esc(m.how)}</span>`;
+  w.hidden = false;
+  $("wclose").onclick = () => { w.hidden = true; store("botscope-studio-welcome", "done"); };
+  w.bsClose = () => $("wclose").click();      // Esc too
+}).catch(() => {});
+
+// ---- Console: Claude chat (your own `claude -p`) + a terminal (a local shell). Off at every launch; the server
+// checks this computer, the exact host and origin, and this launch's token on every request and socket. ----
+const TOKEN = /*TOKEN*/""/*/TOKEN*/;
+const cons = { on: false, session: null, ctrl: null, ws: null, term: null, fit: null, xterm: null };
+const H = (extra) => ({ "Content-Type": "application/json", "X-BotScope-Token": TOKEN, ...extra });
+async function capi(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: H(), body: JSON.stringify(body) } : { headers: H() });
+  const j = await r.json();
+  if (!r.ok) throw new Error(/wrong token/.test(j.error || "") ? "This page is from an earlier launch of BotScope's page server: reload the page." : j.error || r.statusText);
+  return j;
+}
+function consDraw() {
+  $("conswitch").setAttribute("aria-checked", String(cons.on));
+  $("conswitch").textContent = cons.on ? "Switch off" : "Switch on";
+  $("consstate").textContent = cons.on ? "On" : "Off"; $("consstate").classList.toggle("on", cons.on);
+  $("cdot").classList.toggle("on", cons.on);
+  $("consolebtn").title = cons.on ? "Claude chat and a terminal (on)" : "Claude chat and a terminal (off: switch on in Settings)";
+  $("dockoff").hidden = cons.on;
+  for (const id of ["db-chat", "db-term"]) if (!cons.on) $(id).hidden = true;
+  if (cons.on) dockTab($("dt-term").getAttribute("aria-selected") === "true" ? "term" : "chat");
+  $("sendchat").disabled = !cons.on;
+}
+async function consStatus() {
+  try { const s = await capi("/api/console/status", {}); cons.on = s.on; if (!s.claude_found) $("conserr").textContent = "Claude Code (the claude command) wasn't found on this computer."; }
+  catch (e) { cons.on = false; $("conserr").textContent = e.message; $("dockoff").textContent = e.message; }
+  consDraw();
+}
+async function consSwitch(on, confirm) {
+  $("conserr").textContent = "";
+  try {
+    const r = await capi("/api/console/switch", { on, confirm: !!confirm });
+    if (r.question) {                         // the very first time: say what it is and ask once
+      const c = $("consconfirm");
+      c.innerHTML = `<p style="margin:0">${esc(r.question)}</p><div class="row"><button type="button" class="yes" id="consyes">Yes, switch it on</button><button type="button" id="consno">Cancel</button></div>`;
+      c.hidden = false;
+      $("consyes").onclick = () => { c.hidden = true; consSwitch(true, true); };
+      $("consno").onclick = () => { c.hidden = true; consDraw(); };
+      $("consyes").focus();
+      return;
+    }
+    cons.on = r.on;
+    if (current === "start") loadStart();            // step 4's status follows the switch
+    if (!cons.on) { chatAbort(); termClose(); }
+    else { setp.bsClose(); openDock(true); }
+  } catch (e) { $("conserr").textContent = e.message; }
+  consDraw();
+}
+$("conswitch").onclick = () => consSwitch(!cons.on);
+$("setclose").onclick = () => setp.bsClose();
+const setp = $("settings");
+setp.bsOpener = $("setbtn");
+setp.bsClose = () => { setp.hidden = true; $("setbtn").setAttribute("aria-expanded", "false"); $("consconfirm").hidden = true; };
+$("setbtn").onclick = () => { if (!setp.hidden) return setp.bsClose(); setp.hidden = false; $("setbtn").setAttribute("aria-expanded", "true"); consStatus(); $("conswitch").focus(); };
+$("opensettings").onclick = () => { if (setp.hidden) $("setbtn").click(); };
+
+function openDock(show) {
+  $("dock").hidden = !show;
+  $("consolebtn").setAttribute("aria-expanded", String(show));
+  if (show) { consDraw(); ctxDraw(); if (cons.on && !$("db-chat").hidden) $("prompt").focus(); }
+  store("botscope-studio-dock", show ? "1" : "");
+}
+$("consolebtn").onclick = () => openDock($("dock").hidden);
+$("dockclose").onclick = () => openDock(false);
+$("dock").addEventListener("keydown", (e) => { if (e.key === "Escape" && window.innerWidth <= 760 && !$("db-term").contains(e.target)) openDock(false); });
+function dockTab(k) {
+  $("dt-chat").setAttribute("aria-selected", String(k === "chat")); $("dt-term").setAttribute("aria-selected", String(k === "term"));
+  $("db-chat").hidden = !cons.on || k !== "chat"; $("db-term").hidden = !cons.on || k !== "term";
+  if (cons.on && k === "term") termOpen();
+}
+$("dt-chat").onclick = () => dockTab("chat");
+$("dt-term").onclick = () => dockTab("term");
+
+// chat
+function ctxDraw() { $("ctx").textContent = `Asking about: ${(TABS.find(([k]) => k === current) || [, "Studio"])[1]} · ${bot()}`; }
+function md(s) {                                       // escaped text, with `code` and **bold** only
+  return esc(s).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+}
+function addMsg(cls, html) { const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html; $("msgs").appendChild(d); $("msgs").scrollTop = 1e9; return d; }
+function chatAbort() { if (cons.ctrl) cons.ctrl.abort(); }
+$("stopchat").onclick = chatAbort;
+$("newchat").onclick = () => { chatAbort(); cons.session = null; $("msgs").innerHTML = ""; $("prompt").focus(); };
+$("prompt").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("chatform").requestSubmit(); } };
+$("chatform").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("prompt").value.trim();
+  if (!text || cons.ctrl || !cons.on) return;
+  addMsg("you", md(text)); $("prompt").value = "";
+  const out = addMsg("claude", `<span class="muted">Claude is thinking…</span>`);
+  let txt = "", tools = "", started = false;
+  const draw = () => { out.innerHTML = tools + md(txt); $("msgs").scrollTop = 1e9; };
+  cons.ctrl = new AbortController();
+  $("sendchat").hidden = true; $("stopchat").hidden = false;
+  try {
+    const r = await fetch("/api/console/chat", { method: "POST", headers: H(), signal: cons.ctrl.signal,
+      body: JSON.stringify({ prompt: text, session: cons.session, tab: current, bot: bot() }) });
+    if (!r.ok) { const m = (await r.json()).error || r.statusText; throw new Error(/wrong token/.test(m) ? "This page is from an earlier launch: reload the page." : m); }
+    const rd = r.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i); buf = buf.slice(i + 1);
+        let ev; try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === "session") cons.session = ev.id;
+        else if (ev.type === "delta" || ev.type === "text") { if (started && ev.type === "text" && txt) txt += "\n\n"; txt += ev.text; started = true; draw(); }
+        else if (ev.type === "tool") { tools += `<span class="tool">uses ${esc(ev.name.replace(/^mcp__/, "").replaceAll("__", " · "))}</span>`; if (txt) txt += "\n\n"; draw(); }
+        else if (ev.type === "result") { if (ev.session) cons.session = ev.session; }
+        else if (ev.type === "error") { addMsg("err", esc(ev.text)); }
+      }
+    }
+    if (!started && !tools) out.innerHTML = `<span class="muted">(no answer)</span>`;
+  } catch (err) {
+    if (err.name === "AbortError") { txt += (txt ? "\n\n" : "") + "(stopped)"; draw(); }
+    else { out.remove(); addMsg("err", esc(err.message)); }
+  }
+  cons.ctrl = null; $("sendchat").hidden = false; $("stopchat").hidden = true; $("prompt").focus();
+};
+document.addEventListener("click", (e) => {        // "Ask Claude" buttons on the Factory and Optimizer cards
+  const b = e.target.closest("[data-ask]");
+  if (!b) return;
+  openDock(true); if (cons.on) dockTab("chat");
+  $("prompt").value = b.dataset.ask; $("prompt").focus();
+});
+
+// terminal (xterm.js, loaded the first time it's opened; pinned versions with integrity hashes)
+const XT = [["link", "https://unpkg.com/@xterm/xterm@5.5.0/css/xterm.css", "sha384-8Xk9wy/gzEDUKrXtrmCFa2bBuK3BpjpDuL/p0SeKQX19Khl/M+lHOgD/CyYf7efP"],
+  ["script", "https://unpkg.com/@xterm/xterm@5.5.0/lib/xterm.js", "sha384-M169f14mRZOXm3hD/v2Ti0ThIT/RnAQagXA9nlE15yHAtrW19gdePJh/HaTzUOe/"],
+  ["script", "https://unpkg.com/@xterm/addon-fit@0.10.0/lib/addon-fit.js", "sha384-iF+jqbuti4XlB64clWgFWYEscb+UnSRv3VgVikGYZu+otNFnSHr7y7NcKfBnGizn"]];
+function loadXterm() {
+  return cons.xterm ||= XT.reduce((p, [tag, url, sri]) => p.then(() => new Promise((ok, bad) => {
+    const el = document.createElement(tag);
+    if (tag === "link") { el.rel = "stylesheet"; el.href = url; } else el.src = url;
+    el.integrity = sri; el.crossOrigin = "anonymous"; el.onload = ok; el.onerror = () => bad(new Error("couldn't load the terminal (xterm.js) from unpkg.com"));
+    document.head.appendChild(el);
+  })), Promise.resolve());
+}
+async function termOpen() {
+  if (cons.ws || !cons.on) { if (cons.fit) setTimeout(() => cons.fit.fit(), 0); return; }
+  try { await loadXterm(); } catch (e) { $("termstate").textContent = e.message; cons.xterm = null; return; }
+  if (!cons.term) {
+    const css = getComputedStyle(document.documentElement);
+    cons.term = new window.Terminal({ fontSize: 13, cursorBlink: true, convertEol: false, scrollback: 5000,
+      theme: { background: "#111111", foreground: "#f1f0ea", cursor: "#f1f0ea", selectionBackground: "#3a4a6b" },
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" });
+    cons.fit = new window.FitAddon.FitAddon(); cons.term.loadAddon(cons.fit);
+    cons.term.open($("termbox"));
+    cons.term.onData((d) => { if (cons.ws && cons.ws.readyState === 1) cons.ws.send(JSON.stringify({ type: "in", data: d })); });
+    cons.term.onResize(({ cols, rows }) => { if (cons.ws && cons.ws.readyState === 1) cons.ws.send(JSON.stringify({ type: "resize", cols, rows })); });
+    new ResizeObserver(() => { if (!$("db-term").hidden) cons.fit.fit(); }).observe($("termbox"));
+  }
+  cons.fit.fit();
+  const { cols, rows } = cons.term;
+  const ws = new WebSocket(`ws://${location.host}/api/console/term?t=${enc(TOKEN)}&cols=${cols}&rows=${rows}`);
+  ws.binaryType = "arraybuffer"; cons.ws = ws;
+  $("termstate").textContent = "Connecting…";
+  ws.onopen = () => { $("termstate").textContent = "A shell in the botscope folder (this computer only)."; cons.term.focus(); };
+  ws.onmessage = (m) => cons.term.write(typeof m.data === "string" ? m.data : new Uint8Array(m.data));
+  ws.onclose = () => { if (cons.ws === ws) cons.ws = null; $("termstate").textContent = cons.on ? "The shell ended." : "Off."; };
+}
+function termClose() { if (cons.ws) { const w = cons.ws; cons.ws = null; w.close(); } }
+$("termnew").onclick = () => { termClose(); if (cons.term) cons.term.reset(); setTimeout(termOpen, 50); };
+consStatus().then(() => { if (stored("botscope-studio-dock") === "1") openDock(true); });
+</script>
+</body>
+</html>

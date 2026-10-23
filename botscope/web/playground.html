@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Rule Playground</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --line: #e3e2dd; --bar: #8a8a84; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --bar: #77776f; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --bar: #77776f; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, system-ui, sans-serif; padding: 12px 16px; max-width: 760px; }
+h1 { font-size: 18px; margin: 0 0 4px; } h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; }
+.muted { color: var(--muted); font-size: 12px; } .err { color: var(--down); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.rule { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-top: 1px solid var(--line); }
+.rule:first-of-type { border-top: 0; } .rule label { cursor: pointer; }
+.range { position: relative; height: 26px; margin: 8px 0 2px; }
+.range .axis { position: absolute; top: 12px; left: 0; right: 0; height: 2px; background: var(--line); }
+.range .zero { position: absolute; top: 2px; width: 1px; height: 22px; background: var(--muted); }
+.range .band { position: absolute; top: 7px; height: 12px; border-radius: 6px; background: var(--bar); opacity: .55; }
+.range .mid { position: absolute; top: 3px; width: 3px; height: 20px; border-radius: 2px; background: var(--ink); }
+.big { font-size: 16px; } .up { color: var(--up); } .down { color: var(--down); }
+select { font: inherit; }
+a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+summary { cursor: pointer; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1 id="title">Rule playground</h1>
+<div class="muted" id="sub">Turn the bot's rules off and on. Each change is re-added from one cached untested backtest, so it answers in under a second.</div>
+<div class="card"><h2>Rules that block trades</h2><div id="rules" class="muted">Loading (the first time runs one untested backtest)…</div>
+  <div style="margin-top:8px">Sides: <select id="side" aria-label="Which sides to trade"><option value="both">both</option><option value="long">longs only</option><option value="short">shorts only</option></select></div><div class="muted" id="sideslead"></div></div>
+<div class="card"><h2>One month, this mix</h2><div id="mix"></div></div>
+<p class="muted" id="tries" role="status"></p>
+<div class="card"><h2>One month, as coded</h2><div id="base"></div></div>
+<div class="card"><h2>Event days vs ordinary days (untested, this bot as coded)</h2><div id="events" class="muted">Loading…</div></div>
+<p class="muted" id="foot"></p>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const q = new URLSearchParams(location.search), bot = q.get("bot") || "first_hour_breakout";
+let off = new Set(), lo = 0, hi = 0;
+const usd = (x) => `<span class="${x > 0 ? "up" : x < 0 ? "down" : ""}">${x < 0 ? "-" : "+"}$${Math.abs(x).toLocaleString()}</span>`;
+function bar(m) {
+  if (!m.enough) return `<p class="muted">${esc(m.why)}</p>`;
+  const x = (v) => `${((v - lo) / ((hi - lo) || 1) * 100).toFixed(1)}%`;
+  return `<div class="big">${usd(m.bad_usd)} to ${usd(m.good_usd)}, middle ${usd(m.middle_usd)}</div>
+    <div class="range" role="img" aria-label="${esc(m.text)}"><div class="axis"></div>${lo < 0 && hi > 0 ? `<div class="zero" style="left:${x(0)}"></div>` : ""}
+    <div class="band" style="left:${x(m.bad_usd)};width:calc(${x(m.good_usd)} - ${x(m.bad_usd)})"></div><div class="mid" style="left:${x(m.middle_usd)}"></div></div>
+    <div class="muted">${esc(m.text)}. Bad end = 1 month in 20 is worse; good end = 1 in 20 is better.</div>`;
+}
+async function go() {
+  const t0 = performance.now();
+  let d;
+  try {
+    const r = await fetch(`/api/playground?bot=${encodeURIComponent(bot)}&side=${$("side").value}&off=${encodeURIComponent([...off].join("|"))}`);
+    d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || r.statusText);
+  } catch (e) { $("rules").innerHTML = `<span class="err">Could not load: ${esc(e.message)}</span>`; return; }
+  $("title").textContent = `Rule playground · ${d.name}`;
+  const ms = [d.this_mix, d.as_coded].filter((m) => m.enough);
+  lo = Math.min(0, ...ms.map((m) => m.bad_usd)); hi = Math.max(0, ...ms.map((m) => m.good_usd));
+  $("rules").innerHTML = d.rules.length ? d.rules.map((r) => `<div class="rule"><input type="checkbox" id="r-${esc(r.rule)}" data-rule="${esc(r.rule)}" aria-label="Rule on: ${esc(r.rule)}" ${r.on ? "checked" : ""}>
+      <span><label for="r-${esc(r.rule)}"><b>${esc(r.rule)}</b></label><br><span class="muted">Matters? ${esc(r.matters)}</span>${r.worth_testing ? `<br><span class="muted">Worth testing: ${esc(r.worth_testing)}.</span>` : ""}
+      ${r.newest_blocked.length ? `<details class="muted"><summary>Newest trades it blocked</summary>${r.newest_blocked.map((g) =>
+        `<a href="/?bot=${encodeURIComponent(bot)}&symbol=${encodeURIComponent(g.symbol)}&day=${g.day}" target="_blank" rel="noopener">${esc(g.day)} ${esc(g.symbol)}</a> ${esc(g.side)} ${g.r > 0 ? "+" : ""}${g.r}R`).join("<br>")}</details>` : ""}</span></div>`).join("")
+    : `<p class="muted">This bot reported no near misses in the window, so there are no blocking rules to turn off. Sides still work.</p>`;
+  $("mix").innerHTML = bar(d.this_mix) + `<div class="muted">${d.trades} trades in this mix, ${d.total_r > 0 ? "+" : ""}${d.total_r}R in total.</div>`;
+  $("base").innerHTML = bar(d.as_coded);
+  $("tries").textContent = d.tries_note ? `⚠ ${d.tries_note}` : "";
+  $("sideslead").textContent = d.sides_lead ? `Worth testing: ${d.sides_lead}.` : "";
+  $("foot").textContent = `${d.window.period} days ${d.window.from} to ${d.window.to}. Answered in ${((performance.now() - t0) / 1000).toFixed(2)} s (first backtest took ${d.precompute_seconds} s). ${d.note}`;
+}
+$("rules").addEventListener("change", (e) => { const r = e.target.dataset.rule; if (!r) return; e.target.checked ? off.delete(r) : off.add(r); go(); });
+$("side").addEventListener("change", go);
+go().then(() => fetch(`/api/eventdays?bot=${encodeURIComponent(bot)}`).then((r) => r.json()).then((e) => {
+  if (e.error) { $("events").textContent = e.error; return; }
+  $("events").innerHTML = `<table style="width:100%;border-collapse:collapse">${e.groups.map((g) => `<tr><td>${esc(g.days)}</td><td style="text-align:right">${g.trades} trades</td><td style="text-align:right">${g.avg_r == null ? "–" : (g.avg_r > 0 ? "+" : "") + g.avg_r + "R each"}</td><td>${esc(g.verdict)}</td></tr>`).join("")}</table>
+    <p class="muted">${esc(e.source)}. ${esc(e.problems.join("; "))} ${esc(e.note)}</p>`;
+}).catch((err) => { $("events").textContent = `Could not load: ${err.message}`; }));
+</script>
+</body>
+</html>

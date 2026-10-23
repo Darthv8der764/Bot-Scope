@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>BotScope Market Desk</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --chip: #efeee9;
+  --up: #1a9e6a; --down: #d64545; --accent: #3b6fd8; --mid: #c27c0e;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --chip: #262624;
+  --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --mid: #e0a23a;
+} }
+:root[data-theme="dark"] {
+  --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --chip: #262624;
+  --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --mid: #e0a23a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; }
+header form { margin-left: auto; display: flex; gap: 6px; }
+input, button { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; background: var(--panel); }
+a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--muted); text-underline-offset: 2px; }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+main { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; padding: 12px 16px 24px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; display: flex; justify-content: space-between; gap: 8px; }
+.card h2 .src { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.muted { color: var(--muted); font-size: 12px; }
+.err { color: var(--down); font-size: 13px; }
+.nolive { color: var(--ink); font-size: 14px; font-weight: 600; margin: 6px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 2px 4px; }
+td { padding: 3px 4px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+td.n, th.n { text-align: right; }
+.up { color: var(--up); } .down { color: var(--down); }
+.heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; }
+.tile { border-radius: 6px; padding: 8px 6px; color: #fff; min-height: 58px; display: flex; flex-direction: column; justify-content: space-between; }
+.tile b { font-size: 12px; overflow-wrap: anywhere; line-height: 1.2; } .tile span { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.idx { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
+.idx div { min-width: 120px; } .idx b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tools { display: inline-flex; gap: 2px; margin-left: auto; }
+.tools button { border: 0; background: none; color: var(--muted); padding: 0 4px; font-size: 13px; line-height: 1; }
+.tools button:hover, .tools button:focus-visible { color: var(--ink); }
+.grip { cursor: grab; }
+.card.dragging { opacity: .4; }
+.card.drop-before { box-shadow: -3px 0 0 var(--accent); }
+#hiddenlist { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#hiddenlist button { font-size: 12px; padding: 1px 8px; border-radius: 99px; }
+footer { padding: 8px 16px 16px; font-size: 12px; color: var(--muted); }
+@media (max-width: 520px) { .cols { grid-template-columns: 1fr; } header form { margin-left: 0; width: 100%; } header form input { flex: 1; min-width: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Market desk</h1>
+  <span class="pill">information only</span>
+  <span id="hiddenlist"></span>
+  <button id="tourbtn" type="button" title="Show the short tour again">Tour</button>
+  <button id="resetlayout" type="button" title="Put every panel back in the original order and size">Reset layout</button>
+  <form id="pick"><input id="sym" size="7" value="AAPL" aria-label="Ticker for the stock panels"><button>Look up</button></form>
+</header>
+<main id="main"></main>
+<footer>Every panel names its source. Data comes with your own keys and stays on this computer. Nothing here is a tip or a signal. Not financial advice.</footer>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const pct = (x) => x == null ? "–" : `<span class="${x > 0 ? "up" : x < 0 ? "down" : ""}">${x > 0 ? "+" : ""}${Number(x).toFixed(2)}%</span>`;
+const num = (x, d = 2) => x == null ? "–" : Number(x).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+const big = (x) => x == null ? "–" : x >= 1e9 ? (x / 1e9).toFixed(1) + "B" : x >= 1e6 ? (x / 1e6).toFixed(1) + "M" : x >= 1e3 ? (x / 1e3).toFixed(0) + "K" : String(x);
+function heatColor(c) {      // diverging: red (down) .. grey .. green (up), saturates at +/-3%
+  const t = Math.max(-1, Math.min(1, c / 3));
+  const base = t >= 0 ? css("--up") : css("--down");
+  return `color-mix(in srgb, ${base} ${Math.round(25 + 75 * Math.abs(t))}%, #6b6b66)`;
+}
+const table = (cols, rows) => `<table><tr>${cols.map(([h, , n]) => `<th class="${n ? "n" : ""}">${h}</th>`).join("")}</tr>${rows.map((r) => `<tr>${cols.map(([, f, n]) => `<td class="${n ? "n" : ""}">${f(r)}</td>`).join("")}</tr>`).join("")}</table>`;
+
+const PANELS = [
+  { id: "brief", title: "Morning brief", wide: true, url: () => "/api/desk/brief", render: (d) => `
+    <ol class="brief" style="margin:0;padding-left:20px;line-height:1.6">${d.lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ol>
+    <p class="muted">${esc(d.sources)}. ${esc(d.note)}</p>` },
+  { id: "board", title: "Market board + sectors", wide: true, url: () => "/api/desk/board", render: (d) => `
+    <div class="idx">${d.indexes.map((r) => `<div><div class="muted">${esc(r.name)}</div><b>${num(r.price)}</b> ${pct(r.change_pct)}</div>`).join("")}</div>
+    <div class="heat">${d.sectors.map((r) => `<div class="tile" style="background:${heatColor(r.change_pct)}" title="${esc(r.name)} (${r.symbol}): ${r.change_pct}% today, ${r.vs_spy > 0 ? "+" : ""}${r.vs_spy} vs SPY"><b>${esc(r.name)}</b><span>${r.change_pct > 0 ? "+" : ""}${r.change_pct.toFixed(2)}%</span></div>`).join("")}</div>
+    <p class="muted">${d.sectors_up} of ${d.sectors_total} sectors up: ${esc(d.mood || "")}.</p>` },
+  { id: "mybots", title: "My bots", url: () => "/api/desk/mybots", render: (d) => `
+    ${table([["Bot", (r) => `<b>${esc(r.name)}</b> <span class="muted">v${esc(r.version)} · ${esc(r.timeframe)}${r.shadows ? " · shadow" : ""}</span>`],
+             ["Confidence", (r) => esc(r.confidence) + (r.changed_since_report ? ` <span class="down" title="The bot's code changed after its honest report: the label's numbers are for an older version. Run honest_report again.">⚠ changed since its report</span>` : "")],
+             ["Last paper day", (r) => r.last_paper ? `<span class="${r.last_paper.r > 0 ? "up" : r.last_paper.r < 0 ? "down" : ""}">${r.last_paper.r > 0 ? "+" : ""}${r.last_paper.r}R</span> <span class="muted">${esc(r.last_paper.day.slice(5))} · ${r.last_paper.trades} trade${r.last_paper.trades === 1 ? "" : "s"}</span>` : `<span class="muted">none yet</span>`],
+             ["Open", (r) => `<a href="/?bot=${encodeURIComponent(r.id)}&symbol=${encodeURIComponent(r.symbol)}" target="_blank" rel="noopener">chart</a> · <a href="/label?bot=${encodeURIComponent(r.id)}" target="_blank" rel="noopener">label</a> · <a href="/playground?bot=${encodeURIComponent(r.id)}" target="_blank" rel="noopener">playground</a>`]], d.bots)}
+    ${d.files_with_errors.length ? `<p class="muted">Didn't load: ${esc(d.files_with_errors.join(", "))} (check_bot says why).</p>` : ""}` },
+  { id: "budget", title: "Weekly loss budget", url: () => "/api/desk/budget", render: (d) => !d.budget_r ? `<p class="muted">${esc(d.line)}</p>` : `
+    <div><b class="${d.used_up ? "down" : ""}">${d.used_r}R of ${d.budget_r}R used</b> <span class="muted">· week of ${esc(d.week_of)} · ${d.trades} paper trade${d.trades === 1 ? "" : "s"}</span></div>
+    <div style="height:8px;background:var(--line);border-radius:99px;margin:8px 0;overflow:hidden"><div style="height:100%;width:${Math.min(100, d.used_r / d.budget_r * 100)}%;background:${d.used_up ? "var(--down)" : "var(--accent)"}"></div></div>
+    <p class="muted">${esc(d.line)}. When it's used up, everything pauses (STOP) until you resume.</p>` },
+  { id: "autopsy", title: "Last losing day", url: () => "/api/desk/autopsy", render: (d) => !d.found ? `<p class="muted">${esc(d.why)}</p>` : `
+    <div><b>${esc(d.bot)}</b> <span class="muted">· ${esc(d.day)} · ${d.trades} trades ·</span> <span class="down">${d.total_r}R</span>
+      · <a href="${esc(d.chart_path)}" target="_blank" rel="noopener">chart</a></div>
+    ${table([["Check", (r) => `<b>${esc(r.check)}</b>`], ["Found", (r) => esc(r.found)]], d.checks)}
+    <p class="muted">${esc(d.note)}</p>` },
+  { id: "shadow", title: "Shadow scoreboard", url: () => "/api/desk/shadow", render: (d) => d.families.length
+    ? d.families.map((f) => `<h2 style="margin:0 0 4px">${esc(f.family)} <span class="muted">· ${esc(f.day || "")}</span></h2>
+      ${table([["Version", (r) => `<b>v${esc(r.version)}</b> <span class="muted">${esc(r.role)}</span>`],
+               ["Day", (r) => r.day_r == null ? "–" : `${r.day_r > 0 ? "+" : ""}${r.day_r}R`, 1],
+               ["Same days", (r) => `${r.total_r > 0 ? "+" : ""}${r.total_r}R / ${r.trades}`, 1],
+               ["Confidence", (r) => esc(r.confidence)]], f.versions)}
+      <p class="muted">${esc(f.verdict)}</p>`).join("") + `<p class="muted">${esc(d.note)}</p>`
+    : `<p class="muted">${esc(d.how)}</p>` },
+  { id: "weather", title: "Market weather", url: () => "/api/desk/weather", render: (d) => {
+    const w = d.weather, icon = { "trending up": "☀️", "trending down": "🌧️", choppy: "🌥️", panic: "⛈️" }[w.weather] || "❔";
+    return `<div style="font-size:20px"><span aria-hidden="true">${icon}</span> <b>${esc(w.weather)}</b> <span class="muted">· ${esc(w.mood || "")} · as of ${esc(w.as_of_close || "?")} close</span></div>
+    <ul class="muted" style="margin:6px 0 8px;padding-left:18px">${(w.why || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    ${d.bots.length ? table([["Bot", (r) => `<b>${esc(r.name)}</b>`], ["Today", (r) => esc(r.today)]], d.bots)
+      : `<p class="muted">No bot measured yet. Ask Claude: "market weather for my bot".</p>`}
+    <p class="muted">Bot fit uses untested trades only. Not financial advice.</p>`; } },
+  { id: "movers", title: "Movers", url: () => "/api/desk/movers", render: (d) => `
+    <div class="cols"><div>${table([["Up", (r) => `<b>${esc(r.symbol)}</b>`], ["", (r) => pct(r.change_pct), 1]], d.gainers)}</div>
+    <div>${table([["Down", (r) => `<b>${esc(r.symbol)}</b>`], ["", (r) => pct(r.change_pct), 1]], d.losers)}</div></div>
+    <h2 style="margin-top:10px">Most active</h2>${table([["", (r) => `<b>${esc(r.symbol)}</b>`], ["Price", (r) => num(r.price), 1], ["Volume", (r) => big(r.volume), 1]], d.most_active.slice(0, 6))}
+    <p class="muted">${esc(d.filtered)}.</p>` },
+  { id: "calendar", title: "Market calendar (2 weeks)", url: () => "/api/desk/calendar", render: (d) => d.days.map((day) => `
+    <div style="padding:4px 0;border-top:1px solid var(--line)"><b>${new Date(day.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</b>
+    ${day.events.map((e) => `<div style="font-size:13px">${esc(e.event)} <span class="muted">${esc(e.source)}</span></div>`).join("")}</div>`).join("") +
+    (d.problems.length ? `<p class="nolive">Needs live data: ${d.problems.map(esc).join("<br>")}</p>` : "") },
+  { id: "news", title: "News", url: () => "/api/desk/news", render: (d) => d.news.map((n) => `
+    <div style="padding:6px 0;border-top:1px solid var(--line)">
+      <div class="muted">${esc(n.time.slice(5))} ET · ${n.tickers.map(esc).join(", ")} · ${esc(n.publisher)}</div>
+      <a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer" style="color:inherit;font-weight:600;text-decoration:none">${esc(n.headline)}</a>
+      ${n.one_line ? `<div class="muted">${esc(n.one_line)}</div>` : ""}
+    </div>`).join("") || `<p class="muted">No recent news for ${esc(d.tickers.join(", "))}.</p>` },
+  { id: "fed", title: "Fed odds", url: () => "/api/desk/fed", render: (d) => d.meetings.map((m) => `
+    <div style="margin-bottom:8px"><b>${esc(m.meeting)}</b> <span class="muted">most priced: ${esc(m.most_likely)}</span>
+    ${m.outcomes.filter((o) => o.market_odds >= 0.02).map((o) => `<div style="display:flex;align-items:center;gap:8px;font-size:13px">
+      <span style="width:130px">${esc(o.outcome)}</span>
+      <span style="flex:1;height:8px;background:var(--chip);border-radius:4px"><span style="display:block;height:8px;border-radius:4px;width:${Math.round(o.market_odds * 100)}%;background:var(--accent)"></span></span>
+      <span class="n" style="width:42px;text-align:right">${Math.round(o.market_odds * 100)}¢</span></div>`).join("")}</div>`).join("") +
+    `<p class="muted">Price of a $1 YES contract on Kalshi: what traders pay, not a BotScope forecast.</p>` },
+  { id: "yields", title: "Yield curve", url: () => "/api/desk/yields", render: (d) => {
+    const w = 300, h = 110, ys = d.curve.flatMap((p) => [p.yield, p.month_ago]), lo = Math.min(...ys) - 0.1, hi = Math.max(...ys) + 0.1;
+    const X = (i) => 20 + i * (w - 40) / Math.max(1, d.curve.length - 1), Y = (v) => h - 18 - (v - lo) / (hi - lo) * (h - 30);
+    const line = (k) => d.curve.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(p[k]).toFixed(1)}`).join("");
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" role="img" aria-label="Treasury yield curve now and a month ago">
+      <path d="${line("month_ago")}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <path d="${line("yield")}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      ${d.curve.map((p, i) => `<circle cx="${X(i)}" cy="${Y(p.yield)}" r="2.5" fill="var(--accent)"><title>${p.tenor}: ${p.yield}%</title></circle>
+        <text x="${X(i)}" y="${h - 3}" font-size="9" text-anchor="middle" fill="var(--muted)">${p.tenor}</text>`).join("")}
+    </svg>
+    <div class="muted"><span style="color:var(--accent)">━</span> now (${esc(d.curve.at(-1)?.as_of)}) &nbsp; <span>┅</span> a month ago</div>
+    ${table([["Tenor", (p) => p.tenor], ["Yield", (p) => num(p.yield) + "%", 1], ["1 mo chg", (p) => `<span class="${p.change > 0 ? "up" : p.change < 0 ? "down" : ""}">${p.change > 0 ? "+" : ""}${p.change.toFixed(2)}</span>`, 1]], d.curve)}
+    <p class="muted">Shape: ${esc(d.shape)}. ${Object.entries(d.spreads).map(([k, v]) => `${k}: ${v > 0 ? "+" : ""}${v}`).join(" · ")}</p>`; } },
+  { id: "econ", title: "Economy (latest releases)", url: () => "/api/desk/econ", render: (d) =>
+    table([["Indicator", (r) => esc(r.indicator)], ["Value", (r) => `<b>${num(r.value, 2)}</b>`, 1], ["As of", (r) => `<span class="muted">${esc(r.as_of)}</span>`, 1]], d.indicators) },
+  { id: "keydates", title: "Key dates", stock: true, url: () => `/api/desk/keydates?symbol=${sym()}`, render: (d) => {
+    const bot = d.bots.includes(localStorage.getItem("bs-kd-bot")) ? localStorage.getItem("bs-kd-bot") : d.bots[0];
+    const link = (r) => bot ? `<a href="/?bot=${encodeURIComponent(bot)}&symbol=${encodeURIComponent(d.symbol)}&day=${r.date}" target="_blank" rel="noopener">${esc(r.date)}</a>` : esc(r.date);
+    const row = (r) => `<li><b>${r.when === "past" ? link(r) : esc(r.date)}</b> ${esc(r.kind)}: ${esc(r.event)} <span class="muted">${esc(r.source)}</span></li>`;
+    return `<div class="muted">${esc(d.symbol)} · chart with <select class="kdbot" aria-label="Bot for the chart links">${d.bots.map((b) => `<option${b === bot ? " selected" : ""}>${esc(b)}</option>`).join("")}</select></div>
+    <h2 style="margin:8px 0 2px">Coming</h2>${d.coming.length ? `<ul style="margin:0;padding-left:18px">${d.coming.map(row).join("")}</ul>` : `<p class="muted">Nothing found in the next 90 days.</p>`}
+    <h2 style="margin:8px 0 2px">Past year</h2>${d.past.length ? `<ul style="margin:0;padding-left:18px">${d.past.slice(0, 14).map(row).join("")}</ul>` : `<p class="muted">Nothing found.</p>`}
+    ${d.problems.map((p) => `<p class="muted">${esc(p)}</p>`).join("")}<p class="muted">${esc(d.note)}</p>`; } },
+  { id: "options", title: "Options board", stock: true, url: () => `/api/desk/options?symbol=${sym()}`, render: (d) => `
+    <div class="muted">${esc(d.symbol)} at ${num(d.spot)} · expires ${esc(d.expires)}${d.expected_move_usd ? ` · options price in a move of about ±$${num(d.expected_move_usd)}` : ""}</div>
+    ${table([["Call bid/ask", (r) => r.call_bid == null ? "–" : `${num(r.call_bid)} / ${num(r.call_ask)}`, 1], ["Δ", (r) => r.call_delta == null ? "–" : r.call_delta.toFixed(2), 1],
+             ["Strike", (r) => `<b>${num(r.strike, r.strike % 1 ? 1 : 0)}</b>`, 1],
+             ["Put bid/ask", (r) => r.put_bid == null ? "–" : `${num(r.put_bid)} / ${num(r.put_ask)}`, 1], ["Δ", (r) => r.put_delta == null ? "–" : r.put_delta.toFixed(2), 1]], d.rows)}
+    <p class="muted">Free indicative quotes (delayed, approximate). Δ = delta.</p>` },
+  { id: "short", title: "Short interest", stock: true, url: () => `/api/desk/short?symbol=${sym()}`, render: (d) => !d.latest ? `<p class="muted">${esc(d.note)}</p>` : `
+    <div><b style="font-size:18px">${big(d.latest.short_shares)}</b> shares short <span class="muted">(settled ${esc(d.latest.settled)})</span></div>
+    <div class="muted">${num(d.latest.days_to_cover)} days to cover · ${esc(d.trend || "")}</div>
+    ${table([["Settled", (r) => esc(r.settled)], ["Short shares", (r) => big(r.short_shares), 1], ["Change", (r) => pct(r.change_pct), 1], ["Days to cover", (r) => num(r.days_to_cover), 1]], d.reports)}` },
+  { id: "analysts", title: "Analyst ratings", stock: true, url: () => `/api/desk/analysts?symbol=${sym()}`, render: (d) => d.months.map((m) => {
+    const seg = [["strong_buy", "var(--up)", 1], ["buy", "var(--up)", .6], ["hold", "var(--muted)", .5], ["sell", "var(--down)", .6], ["strong_sell", "var(--down)", 1]];
+    return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px"><span style="width:56px" class="muted">${esc(m.month)}</span>
+      <span style="flex:1;display:flex;height:14px;border-radius:4px;overflow:hidden">${seg.map(([k, c, o]) => `<span title="${k.replace("_", " ")}: ${m[k]}" style="flex:${m[k]};background:${c};opacity:${o}"></span>`).join("")}</span>
+      <span style="width:84px;text-align:right" class="muted">${m.buy_side} buy · ${m.sell_side} sell</span></div>`; }).join("") +
+    `<p class="muted">${esc(d.trend || "")}. Counts of ratings, not price targets.</p>` },
+  { id: "insiders", title: "Insiders + filings", stock: true, url: () => `/api/desk/insiders?symbol=${sym()}`, render: (d) => `
+    <div class="muted">Last ${d.days} days: ${d.summary.open_market_buys} open-market buys ($${big(d.summary.bought_usd)}), ${d.summary.open_market_sells} sells ($${big(d.summary.sold_usd)})</div>
+    ${table([["Date", (r) => esc(r.date)], ["Who", (r) => `${esc(r.insider)}<div class="muted">${esc(r.role)}</div>`], ["What", (r) => esc(r.what)], ["Value", (r) => r.value_usd ? "$" + big(r.value_usd) : "–", 1]], d.trades.slice(0, 8))}
+    <h2 style="margin-top:10px">8-K filings</h2>${d.filings_8k.map((f) => `<div><a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(f.filed)}</a> <span class="muted">items ${esc(f.items)}</span></div>`).join("") || `<p class="muted">None.</p>`}` },
+  { id: "risk", title: "Portfolio risk: one bet or many?", url: () => "/api/desk/risk", render: (d) => `
+    <p style="margin:0 0 6px"><b>${esc(d.verdict)}</b></p>
+    <div class="muted">Average correlation ${d.average_correlation ?? "–"} · ${esc(d.direction)}</div>
+    ${table([["Ticker", (r) => `<b>${esc(r.symbol)}</b>`], ["Acts most like", (r) => esc(r.acts_most_like || "–")], ["Beta", (r) => num(r.beta_to_spy), 1], ["Bots trade", (r) => esc(r.bot_sides.join("/")), 1]], d.tickers)}
+    ${d.move_together.length ? `<div class="muted" style="margin-top:6px">Move together (0.7+): ${d.move_together.map((p) => `${esc(p.a)}+${esc(p.b)} ${p.corr}`).join(", ")}</div>` : ""}` },
+];
+document.addEventListener("change", (e) => {     // key dates: which bot the chart links open with
+  if (!e.target.classList.contains("kdbot")) return;
+  try { localStorage.setItem("bs-kd-bot", e.target.value); } catch {}
+  loadPanel(PANELS.find((x) => x.id === "keydates"));
+});
+const sym = () => encodeURIComponent(($("sym").value || "AAPL").trim().toUpperCase());
+
+function card(p) {
+  const el = document.createElement("section");
+  el.className = "card" + (p.wide ? " wide" : "");
+  el.id = "p-" + p.id;
+  el.innerHTML = `<h2><span>${esc(p.title)}${p.stock ? ` · <span class="symname">${decodeURIComponent(sym())}</span>` : ""}</span><span class="src"></span>
+    <span class="tools"><button class="grip" type="button" title="Drag to move (or focus and use the arrow keys)" aria-label="Move ${esc(p.title)}">⠿</button>
+    <button class="wbtn" type="button" title="Wide / narrow" aria-label="Make ${esc(p.title)} wide or narrow">↔</button>
+    <button class="hbtn" type="button" title="Hide this panel" aria-label="Hide ${esc(p.title)}">✕</button></span></h2><div class="body"><span class="muted">Loading…</span></div>`;
+  const grip = el.querySelector(".grip");
+  grip.addEventListener("mousedown", () => { el.draggable = true; });       // only the grip starts a drag, so text stays selectable
+  el.addEventListener("mouseup", () => { el.draggable = false; });
+  el.addEventListener("dragstart", (e) => { el.classList.add("dragging"); e.dataTransfer.setData("text/plain", p.id); e.dataTransfer.effectAllowed = "move"; });
+  el.addEventListener("dragend", () => { el.draggable = false; el.classList.remove("dragging"); document.querySelectorAll(".drop-before").forEach((x) => x.classList.remove("drop-before")); });
+  el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("drop-before"); });
+  el.addEventListener("dragleave", () => el.classList.remove("drop-before"));
+  el.addEventListener("drop", (e) => { e.preventDefault(); el.classList.remove("drop-before"); moveTo(e.dataTransfer.getData("text/plain"), p.id); });
+  el.querySelector(".grip").addEventListener("keydown", (e) => {
+    const d = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+    if (!d) return;
+    e.preventDefault(); nudge(p.id, d); el.querySelector(".grip").focus();
+  });
+  el.querySelector(".wbtn").onclick = () => { toggle(L.wide, p.id); applyLayout(); };
+  el.querySelector(".hbtn").onclick = () => { toggle(L.hidden, p.id); applyLayout(); };
+  return el;
+}
+async function loadPanel(p) {
+  const el = $("p-" + p.id);
+  try {
+    const r = await fetch(p.url());
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || r.statusText);
+    el.querySelector(".body").innerHTML = p.render(d);
+    if (window.botscopeReadable) botscopeReadable(el.querySelectorAll(".heat .tile"));   // black or white per sector color
+    el.querySelector(".src").textContent = d.source ? "Source: " + d.source.split(" (")[0] : "";
+    el.querySelector(".src").title = d.source || "";
+  } catch (e) {
+    el.querySelector(".body").innerHTML = /needs real data/.test(e.message)      // no live data (demo mode): a plain note, not an error
+      ? `<p class="nolive" title="${esc(e.message)}">${marketOpen() ? "Needs live data" : "Market not open: needs live data"}</p>`
+      : /\b401\b|unauthorized/i.test(e.message)                                 // keys rejected: say so, not a raw web page
+      ? `<p class="nolive" title="${esc(e.message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())}">Needs live data: Alpaca didn't accept your keys (make new paper keys at alpaca.markets)</p>`
+      : /\b[A-Z_]+ missing:/.test(e.message)                                    // an optional data key not added yet
+      ? `<p class="nolive" title="${esc(e.message)}">Needs live data: ${esc(e.message.replace(/^\w+Error:\s*/, "").split(":")[0])} (free). <a href="/studio#start" target="_top">Add it in Get started</a></p>`
+      : `<p class="err">Unavailable: ${esc(e.message)}</p>`;
+  }
+}
+function marketOpen(now = new Date()) {       // US stock market hours, New York time (weekdays 9:30 to 4:00; holidays not known here)
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23" })
+    .formatToParts(now).map((x) => [x.type, x.value]));
+  const m = +p.hour * 60 + +p.minute;
+  return !["Sat", "Sun"].includes(p.weekday) && m >= 570 && m < 960;
+}
+function loadAll(only) { document.querySelectorAll(".symname").forEach((e) => e.textContent = decodeURIComponent(sym())); PANELS.filter((p) => (!only || p.stock) && !L.hidden.includes(p.id)).forEach(loadPanel); }
+
+// Layout: order, hidden and wide panels, remembered in this browser only (never sent anywhere).
+const LKEY = "botscope-desk-layout-v1";
+const DEFAULT = () => ({ order: PANELS.map((p) => p.id), hidden: [], wide: PANELS.filter((p) => p.wide).map((p) => p.id) });
+let L = DEFAULT();
+try { const saved = JSON.parse(localStorage.getItem(LKEY) || "null"); if (saved && Array.isArray(saved.order)) L = { ...L, ...saved }; } catch (e) { /* storage off: default layout */ }
+L.order = [...L.order.filter((id) => PANELS.some((p) => p.id === id)), ...PANELS.map((p) => p.id).filter((id) => !L.order.includes(id))];
+const toggle = (arr, id) => { const i = arr.indexOf(id); i < 0 ? arr.push(id) : arr.splice(i, 1); };
+function saveLayout() { try { localStorage.setItem(LKEY, JSON.stringify(L)); } catch (e) { /* not saved, still works */ } }
+function moveTo(id, beforeId) {
+  if (!id || id === beforeId) return;
+  L.order = L.order.filter((x) => x !== id); L.order.splice(L.order.indexOf(beforeId), 0, id); applyLayout();
+}
+function nudge(id, d) {
+  const vis = L.order.filter((x) => !L.hidden.includes(x)), i = vis.indexOf(id), j = i + d;
+  if (j < 0 || j >= vis.length) return;
+  const a = L.order.indexOf(id), b = L.order.indexOf(vis[j]);
+  [L.order[a], L.order[b]] = [L.order[b], L.order[a]]; applyLayout();
+}
+function applyLayout() {
+  const wasHidden = new Set([...document.querySelectorAll("#main .card")].filter((e) => e.hidden).map((e) => e.id.slice(2)));
+  L.order.forEach((id) => {
+    const el = $("p-" + id);
+    el.hidden = L.hidden.includes(id);
+    el.classList.toggle("wide", L.wide.includes(id));
+    $("main").appendChild(el);
+    if (wasHidden.has(id) && !el.hidden) loadPanel(PANELS.find((p) => p.id === id));
+  });
+  $("hiddenlist").innerHTML = L.hidden.length ? `<span class="muted">Hidden:</span>` + L.hidden.map((id) =>
+    `<button type="button" data-id="${id}" title="Show this panel again">+ ${esc(PANELS.find((p) => p.id === id).title)}</button>`).join("") : "";
+  $("hiddenlist").querySelectorAll("button").forEach((b) => b.onclick = () => { toggle(L.hidden, b.dataset.id); applyLayout(); });
+  saveLayout();
+}
+$("resetlayout").onclick = () => { const hid = L.hidden; L = DEFAULT(); applyLayout(); PANELS.filter((p) => hid.includes(p.id)).forEach(loadPanel); };
+PANELS.forEach((p) => $("main").appendChild(card(p)));
+applyLayout();
+$("pick").onsubmit = (e) => { e.preventDefault(); loadAll(true); };
+loadAll();
+</script>
+<script src="/tour.js"></script>
+<script>
+botscopeTour("desk", [
+  { title: "The market desk", text: "Free market panels in one place. Information only: nothing here is a tip, and nothing changes what a bot does." },
+  { el: "#p-board", title: "Market board", text: "SPY, QQQ, DIA and IWM are ETFs that track the big indexes (prices are ETF prices, not index levels). The tiles are the 11 sectors." },
+  { el: "#p-brief", title: "Morning brief", text: "Three lines before the open: the weather, today's events, and what each bot that's on will watch." },
+  { el: "#p-budget", title: "Weekly loss budget", text: "One weekly loss limit across all your bots. When it's used up, everything pauses." },
+  { el: "#p-mybots", title: "My bots", text: "Each of your bots with its confidence level, and one click to its chart, its nutrition label, or the rule playground." },
+  { el: "#p-weather", title: "Market weather", text: "Trending, choppy or panic, from SPY's finished days, plus which bots tend to do well in that weather." },
+  { el: "#pick", title: "Look up a stock", text: "Type a ticker to fill the stock panels: key dates, options, short interest, analysts, insiders." },
+  { el: ".grip", title: "Make it yours", text: "Drag the grip to move a panel, or use the buttons to make it wide or hide it. Remembered in this browser only." },
+  { el: "#resetlayout", title: "Reset", text: "Puts every panel back. Press Tour to see this again." }
+], { button: "#tourbtn" });
+</script>
+</body>
+</html>

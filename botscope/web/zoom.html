@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Zoom Stack</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --mark: #e0a800; --grid: #ececea; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --mark: #f5c542; --grid: #262624; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --mark: #f5c542; --grid: #262624; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, system-ui, sans-serif; padding: 12px 16px; }
+h1 { font-size: 18px; margin: 0 0 4px; } .muted { color: var(--muted); font-size: 12px; }
+.lvl { background: var(--panel); border-radius: 8px; padding: 8px; margin-top: 10px; }
+.lvl h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; margin: 0 0 4px; color: var(--muted); }
+.c { height: 220px; position: relative; }
+.err { color: var(--down); }
+</style>
+</head>
+<body>
+<h1 id="title">Zoom stack</h1>
+<div class="muted" id="sub">Loading…</div>
+<div id="levels"></div>
+<p class="muted" id="foot"></p>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const q = new URLSearchParams(location.search);
+(async () => {
+  let Z;
+  try {
+    const r = await fetch(`/api/zoom?symbol=${encodeURIComponent(q.get("symbol") || "SPY")}&day=${encodeURIComponent(q.get("day") || "")}&t=${encodeURIComponent(q.get("t") || "")}`);
+    Z = await r.json(); if (!r.ok || Z.error) throw new Error(Z.error || r.statusText);
+  } catch (e) { $("sub").innerHTML = `<span class="err">Could not load: ${esc(e.message)}</span>`; return; }
+  $("title").textContent = `Zoom stack · ${Z.symbol} · ${Z.day} ${Z.at}`;
+  $("sub").textContent = "Same moment, three zoom levels: the yellow line is where you were on the bot chart.";
+  $("foot").textContent = `Data: ${Z.source}. ${Z.note}` + (Z.problems.length ? ` Problems: ${Z.problems.join("; ")}` : "");
+  for (const L of Z.levels) {
+    const box = document.createElement("div"); box.className = "lvl";
+    box.innerHTML = `<h2>${esc(L.title)}</h2>${L.candles.length ? "" : '<p class="muted">No candles here.</p>'}<div class="c"></div>`;
+    $("levels").appendChild(box);
+    if (!L.candles.length) continue;
+    const el = box.querySelector(".c");
+    const ch = LightweightCharts.createChart(el, { autoSize: true, layout: { background: { color: "transparent" }, textColor: css("--muted") },
+      grid: { vertLines: { color: css("--grid") }, horzLines: { color: css("--grid") } }, timeScale: { timeVisible: L.timeframe !== "1Day" } });
+    const s = ch.addCandlestickSeries({ upColor: css("--up"), downColor: css("--down"), borderVisible: false, wickUpColor: css("--up"), wickDownColor: css("--down") });
+    s.setData(L.candles);
+    const near = L.candles.reduce((a, c) => Math.abs(c.time - L.mark) < Math.abs(a.time - L.mark) ? c : a);
+    s.setMarkers([{ time: near.time, position: "aboveBar", color: css("--mark"), shape: "arrowDown", text: "here" }]);
+    const line = document.createElement("div");
+    Object.assign(line.style, { position: "absolute", top: 0, bottom: "28px", width: "2px", background: css("--mark"), pointerEvents: "none", zIndex: 3 });
+    el.appendChild(line);
+    const place = () => { const x = ch.timeScale().timeToCoordinate(near.time); line.style.display = x == null ? "none" : "block"; line.style.left = (x ?? 0) - 1 + "px"; };
+    ch.timeScale().fitContent(); ch.timeScale().subscribeVisibleLogicalRangeChange(place); setTimeout(place, 50);
+  }
+})();
+</script>
+</body>
+</html>

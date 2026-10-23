@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Parent View</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --up: #1a9e6a; --down: #d64545; --accent: #3b6fd8; --chip: #efeee9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --chip: #262624; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --chip: #262624; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 22px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.muted { color: var(--muted); font-size: 13px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.card .k { font-size: 12px; color: var(--muted); } .card .v { font-weight: 700; margin-top: 2px; }
+.ok { color: var(--up); } .bad { color: var(--down); }
+.bot { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+.bot ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; } td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wrap { overflow-x: auto; }
+.ro { background: var(--chip); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Parent view</h1>
+  <div class="muted" id="sub">Loading…</div>
+  <div class="ro">Read only: nothing on this page can change a setting or place an order.</div>
+  <div class="cards" id="cards"></div>
+  <h2>The bots</h2><div id="bots"></div>
+  <h2>Recent paper trades</h2><div class="wrap" id="trades"></div>
+  <h2>Recent guard alerts</h2><div class="wrap" id="alerts"></div>
+  <p class="muted" id="note"></p>
+</main>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const card = (k, v, cls) => `<div class="card"><div class="k">${esc(k)}</div><div class="v ${cls || ""}">${esc(v)}</div></div>`;
+const r = x => x == null ? "" : (x > 0 ? "+" : "") + Number(x).toFixed(2) + "R";
+fetch("/api/parent").then(x => x.json()).then(d => {
+  if (d.error) { document.getElementById("sub").textContent = d.error; return; }
+  document.getElementById("sub").textContent = `Account: ${d.account} · ${d.bots.length} bots`;
+  const L = d.limits;
+  document.getElementById("cards").innerHTML =
+    card("Real-money lock", d.live_lock_on ? "Locked" : "Unlocked", d.live_lock_on ? "ok" : "bad") +
+    card("STOP everything", d.stopped ? "Stopped" : "Not pressed", d.stopped ? "bad" : "") +
+    card("Bots on real money", L.live_bots.length ? L.live_bots.join(", ") : "None", L.live_bots.length ? "bad" : "ok") +
+    card("Biggest real order", "$" + Number(L.max_order_usd).toLocaleString()) +
+    card("Orders a day, at most", L.max_orders_per_day) +
+    card("Weekly loss budget", L.weekly_loss_budget_r ? L.weekly_loss_budget_r + "R" : "Not set");
+  document.getElementById("bots").innerHTML = d.bots.map(b => `<div class="bot"><b>${esc(b.name)}</b>
+    <div class="chips"><span class="chip">${esc(b.money)}</span><span class="chip">${b.on_today ? "on today" : "off today"}</span>
+    <span class="chip">${esc(b.timeframe)}</span><span class="chip">${esc(b.symbols.join(", "))}</span>
+    <span class="chip">label: ${esc(b.status)}</span><span class="chip">confidence: ${esc(b.confidence)}</span></div>
+    <div>${esc(b.what_it_does)}</div><ul>${b.rules.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("") || '<p class="muted">No bots yet.</p>';
+  const T = d.recent_paper_trades;
+  document.getElementById("trades").innerHTML = T.length ? `<table><tr><th>Day</th><th>Bot</th><th>Symbol</th><th>Side</th><th>Result</th><th>Why it ended</th></tr>` +
+    T.map(t => `<tr><td>${esc(t.day)}</td><td>${esc(t.bot)}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td class="num ${t.r > 0 ? "ok" : t.r < 0 ? "bad" : ""}">${r(t.r)}</td><td>${esc(t.why_out)}</td></tr>`).join("") + "</table>" : '<p class="muted">No paper trades logged yet.</p>';
+  const A = d.recent_alerts;
+  document.getElementById("alerts").innerHTML = A.length ? `<table><tr><th>When (UTC)</th><th>From</th><th>Decision</th><th>Why</th></tr>` +
+    A.map(a => `<tr><td>${esc((a.when || "").slice(0, 16).replace("T", " "))}</td><td>${esc(a.source)}</td><td>${esc(a.decision)}</td><td>${esc(a.reason)}</td></tr>`).join("") + "</table>" : '<p class="muted">No guard alerts yet.</p>';
+  document.getElementById("note").textContent = d.note + (d.alert_channels_on.length ? " Phone alerts go to: " + d.alert_channels_on.join(", ") + "." : "");
+}).catch(e => { document.getElementById("sub").textContent = "Couldn't load: " + e; });
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Daily Pre-flight</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --up: #1a9e6a; --down: #d64545; --accent: #3b6fd8; --chip: #efeee9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --chip: #262624; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --chip: #262624; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 20px; margin: 0 0 2px; }
+.muted { color: var(--muted); font-size: 13px; }
+.banner { background: var(--down); color: var(--on-down); padding: 10px 12px; border-radius: 8px; font-weight: 700; margin: 12px 0; }
+.bot { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 10px 0; }
+.bot.red { border-left: 4px solid var(--down); }
+.bot .info { flex: 1; min-width: 0; }
+.bot b { font-size: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+.warn { color: var(--down); font-size: 13px; margin: 2px 0 0; }
+.sw { position: relative; width: 52px; height: 30px; flex: none; }
+.sw input { opacity: 0; width: 0; height: 0; }
+.sw span { position: absolute; inset: 0; background: var(--line); border-radius: 99px; cursor: pointer; transition: .15s; }
+.sw span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: .15s; }
+.sw input:checked + span { background: var(--up); }
+.sw input:checked + span::after { transform: translateX(22px); }
+.sw input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.events { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 12px 0; font-size: 14px; }
+button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 0; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer; }
+#msg { margin-left: 10px; }
+.lead { margin: 2px 0 10px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Daily pre-flight</h1>
+  <p class="lead">Your daily on/off list: before the bots start, each failed or new strategy asks <b>on</b> or <b>off</b> for today. No answer = yesterday's settings.</p>
+  <div class="muted" id="sub">Loading…</div>
+  <div id="stopped"></div>
+  <div class="events" id="events"></div>
+  <div id="list"></div>
+  <button id="save">Save today's list</button><span class="muted" id="msg"></span>
+  <p class="muted">No answer = yesterday's settings. A bot you never switched on stays off. Paper by default; live money also needs the graduation test. Not financial advice.</p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+async function load() {
+  const r = await fetch("/api/preflight"); const L = await r.json();   // fast: the calendar loads after
+  fetch("/api/preflight?events=1").then((x) => x.json()).then((E) => showEvents(E.events_today || [])).catch(() => {});
+  if (L.error) { $("sub").textContent = L.error; return; }
+  $("sub").textContent = `${L.day} · settings from: ${L.answered_by}`;
+  $("stopped").innerHTML = L.stopped ? `<div class="banner">STOP is on: every bot is off until you resume (STOP button on the chart).</div>` : "";
+  if (!$("events").dataset.done) $("events").innerHTML = `<b>Today</b>: <span class="muted">checking the market calendar…</span>`;
+  const bots = [...L.bots].sort((a, b) => (b.flag === "red") - (a.flag === "red"));   // red flags first
+  $("list").innerHTML = bots.map((b) => `<div class="bot ${b.flag === "red" ? "red" : ""}">
+    <div class="info"><b>${esc(b.name)}</b>
+      <div class="chips"><span class="chip">${esc(b.timeframe)}</span><span class="chip">${esc(b.status)}</span><span class="chip">confidence: ${esc(b.confidence)}</span></div>
+      ${b.warnings.map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("") || `<div class="muted">No red flags.</div>`}
+    </div>
+    <label class="sw" title="On / off today"><input type="checkbox" data-id="${esc(b.id)}" ${b.on ? "checked" : ""} aria-label="${esc(b.name)} on today"><span></span></label>
+  </div>`).join("");
+}
+function showEvents(ev) {
+  $("events").dataset.done = "1";
+  $("events").innerHTML = "<b>Today</b>: " + (ev.length ? ev.map((e) => `${esc(e.event)} <span class="muted">(${esc(e.source)})</span>`).join(" · ") : "no big scheduled events");
+}
+$("save").onclick = async () => {
+  const choices = {}; document.querySelectorAll("input[data-id]").forEach((i) => choices[i.dataset.id] = i.checked);
+  const r = await fetch("/api/preflight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ choices }) });
+  const j = await r.json();
+  $("msg").textContent = r.ok ? "Saved for today." : (j.error || "Could not save");
+  load();
+};
+load();
+</script>
+</body>
+</html>

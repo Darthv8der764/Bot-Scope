@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Trade Clip</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --accent: #3b6fd8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --accent: #6d97ee; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --accent: #6d97ee; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-size: 20px; margin: 0 0 2px; } .muted { color: var(--muted); font-size: 13px; }
+canvas { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); display: block; margin: 12px 0; background: #111; }
+button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 0; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer; margin-right: 8px; }
+button:disabled { opacity: .5; cursor: default; }
+#msg { margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Trade clip</h1>
+  <div class="muted" id="sub">Loading…</div>
+  <canvas id="cv" width="640" height="360"></canvas>
+  <button id="play">Play</button><button id="rec">Record and save</button>
+  <div class="muted" id="msg">Saved on this computer only (data/clips). Nothing is uploaded.</div>
+</main>
+<script>
+const $ = id => document.getElementById(id), cv = $("cv"), g = cv.getContext("2d");
+const q = new URLSearchParams(location.search);
+let D = null;
+function frame(n) {                                  // draw the first n candles + the trade lines + the honest label
+  const W = cv.width, H = cv.height, top = 16, bot = 270, cs = D.candles, t = D.trade;
+  g.fillStyle = "#111"; g.fillRect(0, 0, W, H);
+  const hi = Math.max(...cs.map(c => c.high), t.stop, t.target || -Infinity), lo = Math.min(...cs.map(c => c.low), t.stop, t.target || Infinity);
+  const y = p => top + (hi - p) / (hi - lo || 1) * (bot - top), w = (W - 40) / cs.length, x = i => 20 + i * w + w / 2;
+  cs.slice(0, n).forEach((c, i) => {
+    g.strokeStyle = g.fillStyle = c.close >= c.open ? "#2fbf86" : "#ef6363";
+    g.beginPath(); g.moveTo(x(i), y(c.high)); g.lineTo(x(i), y(c.low)); g.stroke();
+    g.fillRect(x(i) - Math.max(1, w * .35), Math.min(y(c.open), y(c.close)), Math.max(2, w * .7), Math.max(1, Math.abs(y(c.open) - y(c.close))));
+  });
+  const at = tm => cs.reduce((k, c, i) => c.time <= tm ? i : k, -1), iIn = at(t.t_in), iOut = at(t.t_out);   // the candle holding that time (merged ones too)
+  const line = (p, col, from, to, txt) => { g.strokeStyle = col; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x(from), y(p)); g.lineTo(x(to), y(p)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.font = "11px -apple-system, sans-serif"; g.fillText(txt, Math.min(x(from) + 4, W - 90), y(p) - 4); };
+  if (iIn >= 0 && n > iIn) {
+    const end = Math.min(n - 1, iOut < 0 ? cs.length - 1 : iOut);
+    line(t.entry, "#6d97ee", iIn, end, `${t.side} ${t.entry.toFixed(2)}`); line(t.stop, "#ef6363", iIn, end, `stop ${t.stop.toFixed(2)}`);
+    if (t.target) line(t.target, "#2fbf86", iIn, end, `target ${t.target.toFixed(2)}`);
+    if (iOut >= 0 && n > iOut) { g.fillStyle = "#fff"; g.beginPath(); g.arc(x(iOut), y(t.exit), 5, 0, 7); g.fill(); }
+  }
+  g.fillStyle = "rgba(0,0,0,.75)"; g.fillRect(0, 282, W, 78);
+  D.label.forEach((s, i) => { g.fillStyle = i === 3 ? "#bbb" : "#fff"; g.font = (i === 0 ? "bold 14px" : "13px") + " -apple-system, sans-serif"; g.fillText(s, 12, 300 + i * 18, W - 24); });
+}
+function play(done) {
+  let n = 0; const total = D.candles.length, step = Math.max(1, Math.ceil(total / 90));
+  const tick = () => { n = Math.min(total, n + step); frame(n); if (n < total) setTimeout(tick, 60); else setTimeout(() => done && done(), 1200); };
+  tick();
+}
+$("play").onclick = () => play();
+$("rec").onclick = () => {
+  if (!window.MediaRecorder) { $("msg").textContent = "This browser can't record video."; return; }
+  const chunks = [], rec = new MediaRecorder(cv.captureStream(30), { mimeType: "video/webm" });
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = async () => {
+    const blob = new Blob(chunks, { type: "video/webm" });
+    const r = await fetch("/api/clip/save?name=" + encodeURIComponent(D.name), { method: "POST", headers: { "Content-Type": "video/webm" }, body: blob }).then(x => x.json());
+    $("msg").textContent = r.error ? "Couldn't save: " + r.error : `Saved ${r.saved} (${Math.round(r.bytes / 1024)} KB). ${r.note}`;
+    $("rec").disabled = false;
+  };
+  $("rec").disabled = true; $("msg").textContent = "Recording…"; rec.start(); play(() => rec.stop());
+};
+fetch("/api/clip?" + q.toString()).then(r => r.json()).then(d => {
+  if (d.error) { $("sub").textContent = d.error; return; }
+  D = d; $("sub").textContent = `${d.bot} · ${d.symbol} · ${d.day} · ${d.candles.length} candles`; frame(d.candles.length);
+}).catch(e => { $("sub").textContent = "Couldn't load: " + e; });
+</script>
+</body>
+</html>

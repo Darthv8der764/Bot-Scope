@@ -1,0 +1,18 @@
+{
+ "_note": "Trading costs in basis points of price (1 bp = 0.01%), one side. Starting values were measured from real paper fills in the prototype (Oct 2026, small sample). Re-measure with your own fills. Every backtest pays these. Measured: stock_intraday (all three), swing entry/exit, crypto entry/exit. Guessed (no fills yet): swing and crypto stop_extra_bps.",
+ "stock_intraday": {
+  "entry_bps": 0.5,
+  "exit_bps": 0.5,
+  "stop_extra_bps": 7.7
+ },
+ "swing": {
+  "entry_bps": 5.0,
+  "exit_bps": 5.0,
+  "stop_extra_bps": 5.0
+ },
+ "crypto": {
+  "entry_bps": 57.5,
+  "exit_bps": 57.5,
+  "stop_extra_bps": 20.0
+ }
+}

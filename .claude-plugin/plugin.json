@@ -1,0 +1,26 @@
+{
+  "name": "botscope",
+  "version": "0.4.0",
+  "description": "Look inside your own trading bots from your own Claude: honest backtests, a live 'what the bot sees' chart, a market desk, and safety rails. Paper trading by default. Not financial advice.",
+  "author": { "name": "BotScope contributors" },
+  "license": "LicenseRef-PolyForm-Strict-1.0.0-BotScope",
+  "keywords": ["trading", "backtest", "paper-trading", "alpaca", "mcp"],
+  "mcpServers": {
+    "botscope": {
+      "command": "uv",
+      "args": ["run", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "botscope-mcp"]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__alpaca__(place_.*_order|replace_order_by_id|exercise_options_position)",
+        "hooks": [{ "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" botscope-guard" }]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{ "type": "command", "command": "uv run --quiet --directory \"${CLAUDE_PLUGIN_ROOT}\" python -m botscope.checkpoints" }]
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+# secrets: never commit
+.env
+.env.*
+!.env.example
+# caches and downloaded data (never redistribute market data)
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+.DS_Store
+# local editor/preview settings
+.claude/
+.scratch/
+gallery/
+# your own paths for 'import my bots' (never committed)
+botscope.local.json
+# names + hashes of your own strategies, for publish-check (never committed)
+botscope.private.json
+# your own strategies: loaded like bots/, never committed or published (see botscope/loader.py)
+bots_private/

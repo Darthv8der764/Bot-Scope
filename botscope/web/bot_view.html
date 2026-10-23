@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>BotScope Bot View</title>
+<!-- TradingView Lightweight Charts, pinned version (Apache-2.0, attribution required: see footer) -->
+<script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd;
+  --up: #1a9e6a; --down: #d64545; --stop: #d64545; --target: #1a9e6a; --ind1: #3b6fd8; --ind2: #c27c0e;
+  --draw: #8a3ffc; --veto: #8d8d88; --accent: #3b6fd8; --chip: #efeee9;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a;
+  --up: #2fbf86; --down: #ef6363; --stop: #ef6363; --target: #2fbf86; --ind1: #6d97ee; --ind2: #e0a23a;
+  --draw: #b388ff; --veto: #77776f; --accent: #6d97ee; --chip: #262624;
+} }
+:root[data-theme="dark"] {
+  --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a;
+  --up: #2fbf86; --down: #ef6363; --stop: #ef6363; --target: #2fbf86; --ind1: #6d97ee; --ind2: #e0a23a;
+  --draw: #b388ff; --veto: #77776f; --accent: #6d97ee; --chip: #262624;
+}
+* { box-sizing: border-box; }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 16px; margin: 0; }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+.pill.paper { background: color-mix(in srgb, var(--up) 18%, transparent); color: color-mix(in srgb, var(--up) 55%, var(--ink)); font-weight: 600; }
+.pill.live-money { background: var(--down); color: var(--on-down); font-weight: 700; }
+.pill.failed { background: color-mix(in srgb, var(--down) 15%, transparent); color: var(--down); }
+.pill.warn { background: color-mix(in srgb, var(--ind2) 20%, transparent); color: var(--ind2); font-weight: 600; white-space: normal; }
+.pill.livefeed::before { content: "● "; color: var(--down); }
+#conf { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; font-size: 12px; color: var(--muted); }
+#conf .bars { display: inline-flex; gap: 2px; }
+#conf .bars i { width: 10px; height: 10px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 30%, transparent); }
+#conf b { color: var(--ink); }
+header form { display: flex; gap: 6px; margin-left: auto; }
+#f-symbol { width: 10ch; }
+input, select, button, textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; background: var(--panel); }
+button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+button.danger { border-color: var(--down); color: var(--down); }
+button.stop { background: var(--down); border-color: var(--down); color: var(--on-down); font-weight: 800; letter-spacing: .05em; }
+button.stop.stopped { background: var(--panel); color: var(--down); }
+main { display: grid; grid-template-columns: 1fr 300px; gap: 0; min-height: calc(100vh - 100px); }
+#chartwrap { position: relative; min-height: 460px; border-right: 1px solid var(--line); }
+#chart { position: absolute; inset: 0; }
+#overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+#overlay.drawing { pointer-events: auto; cursor: crosshair; }
+#legend { position: absolute; top: 8px; left: 12px; z-index: 4; font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; pointer-events: none; }
+#legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+@media (max-width: 760px) {   /* phone: chart on top, panels below, header wraps */
+  main { grid-template-columns: 1fr; } aside { border-left: 0; border-top: 1px solid var(--line); }
+  #chartwrap { height: 58vh; min-height: 320px; border-right: 0; } header { padding: 10px 16px; gap: 6px 10px; } header h1 { font-size: 15px; width: 100%; }
+}
+aside { padding: 12px 16px; display: flex; flex-direction: column; gap: 14px; background: var(--panel); }
+aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 6px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.why { font-size: 15px; }
+.why .t { color: var(--muted); font-size: 12px; }
+.kind { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.kind.entry { color: var(--up); } .kind.exit { color: var(--accent); } .kind.no_trade, .kind.rejected { color: var(--down); }
+.kind.holding { color: var(--ind2); } .kind.vetoed { color: var(--veto); } .kind.ghost { color: var(--muted); }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 13px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.muted { color: var(--muted); font-size: 12px; }
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+#modal .box { position: relative; background: var(--panel); border-radius: 10px; padding: 18px; max-width: 380px; width: 100%; }
+#modal h3 { margin: 0 0 6px; font-size: 16px; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; display: none; z-index: 11; max-width: 90vw; }
+footer { padding: 8px 16px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+footer a { color: var(--muted); }
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; }
+  #chartwrap { min-height: 380px; border-right: 0; border-bottom: 1px solid var(--line); }
+  header form { margin-left: 0; width: 100%; }
+  header form input { flex: 1; min-width: 0; }
+  header form #f-symbol { flex: 0 0 auto; width: 10ch; min-width: 10ch; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Bot view</h1>
+  <span class="pill" id="status"></span>
+  <span class="pill paper" id="account">PAPER</span>
+  <span class="pill" id="feed"></span>
+  <span class="pill warn" id="events" hidden></span>
+  <span class="pill" id="vsspy" hidden title="Same $10,000 put into SPY over the days on this chart, one round trip of costs. Closed bot trades only. Not financial advice."></span>
+  <button id="stopbtn" class="stop" type="button" title="Block every order and turn every bot off">STOP</button>
+  <button id="teachbtn" type="button" title="The bot explains this day step by step, like a tutor">Teach me</button>
+  <button id="tourbtn" type="button" title="Show the 2-minute tour again">Tour</button>
+  <button id="lessonbtn" type="button" title="A hands-on lesson: each step checks off as you do it">Tutorial</button>
+  <a class="pill" id="labellink" href="#" target="_blank" rel="noopener" title="The bot's nutrition label">Label</a>
+  <button id="conf" type="button" title="Confidence: why this level?">Confidence <span class="bars"></span> <b></b></button>
+  <form id="pick">
+    <input id="f-symbol" size="8" aria-label="Symbol">
+    <input id="f-day" type="date" aria-label="Day">
+    <select id="f-span" aria-label="Time range" title="Longer ranges use bigger candles so the chart stays readable">
+      <option value="1d">1 day</option><option value="2d">2 days</option><option value="5d">5 days</option>
+      <option value="10d">10 days</option><option value="1m">1 month</option><option value="3m">3 months</option>
+      <option value="6m">6 months</option></select>
+    <button>Show</button>
+  </form>
+</header>
+<main>
+  <div id="chartwrap">
+    <div id="chart"></div>
+    <canvas id="overlay"></canvas>
+    <div id="legend"></div>
+  </div>
+  <aside>
+    <section id="p-replay" data-closable data-title="Replay the day">
+      <h2>Replay the day</h2>
+      <div class="row" style="align-items:center">
+        <button id="r-play" title="Watch the bot decide, candle by candle">▶ Play</button>
+        <input id="r-slider" type="range" min="0" max="0" value="0" style="flex:1;min-width:0" aria-label="Replay position">
+        <span id="r-time" class="muted" style="min-width:42px"></span>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <select id="r-speed" aria-label="Replay speed"><option value="400">Slow</option><option value="120" selected>Normal</option><option value="30">Fast</option></select>
+        <button id="r-all">Show whole day</button>
+        <button id="r-quiz" title="Guess what the bot does on some candles, then see its real answer">Quiz me</button>
+      </div>
+    </section>
+    <section id="lesson" hidden data-popup data-outside="no">
+      <h2>Tutorial: learn by doing</h2>
+      <p class="muted purpose">Step 1, what this is: BotScope gives you stock information for your own personal trading decisions. You can also use it with paper trading. It never places real orders for you and isn't financial advice.</p>
+      <div id="lesson-body"></div>
+    </section>
+    <section id="p-alike" data-closable data-title="Days like today">
+      <h2>Days like today</h2>
+      <div id="al-body"><button id="al-load" title="Finds past days whose market looked like today's at the open, then replays the bot on them">Find days like today</button></div>
+    </section>
+    <section id="p-timemap" data-closable data-title="Time-of-day map">
+      <h2>Time-of-day map (untested days)</h2>
+      <div id="tm-body"><button id="tm-load" title="Replays the bot's untested days and groups its trades by entry hour">Which hours make or lose money?</button></div>
+    </section>
+    <section id="p-whatif" data-closable data-title="What if?">
+      <h2>What if? (untested days)</h2>
+      <div id="wi-body"><button id="wi-load" title="Replays the bot's untested days with 30 stop/target settings (about a minute the first time)">Try other stops and targets</button></div>
+    </section>
+    <section id="p-why" data-closable data-title="Why not here?">
+      <h2>Why not here?</h2>
+      <div class="card why" id="why"><span class="muted">Click any candle to see what the bot decided there and why.</span></div>
+    </section>
+    <section id="p-ghosts" data-closable data-title="Near misses">
+      <h2>Near misses (ghost trades)</h2>
+      <div class="card" id="ghostcard"><span class="muted">No near misses this day.</span></div>
+      <label class="muted"><input type="checkbox" id="g-show" checked> Show ghosts on the chart (faded)</label>
+    </section>
+    <section id="p-trade" data-closable data-title="Trade">
+      <h2>Trade</h2>
+      <div class="card" id="trade"><span class="muted">No trade selected.</span></div>
+    </section>
+    <section id="p-draw" data-closable data-title="Draw to explain">
+      <h2>Draw to explain</h2>
+      <div class="row">
+        <button id="m-pointer" class="on" title="Click candles, drag stop/target lines">Pointer</button>
+        <button id="m-line">Line</button>
+        <button id="m-circle">Circle</button>
+        <button id="m-note" title="Click a candle to pin a note to it">Note</button>
+      </div>
+      <p class="muted" id="drawhelp">Pick Line or Circle, then drag on the chart, or Note and click a candle. Claude can read your drawings and notes.</p>
+      <div id="drawlist"></div>
+    </section>
+    <section id="p-vetoes" data-closable data-title="Your vetoes">
+      <h2>Your vetoes</h2>
+      <div class="card" id="vetocard"><span class="muted">No vetoes yet. Use "This looks bad" on a trade.</span></div>
+    </section>
+    <p class="muted">Paper only: moving a line or vetoing replays the day with your change. Nothing here sends an order. Not financial advice.</p>
+  </aside>
+</main>
+<footer>
+  <span id="source"></span>
+  <span>Charts by <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView Lightweight Charts™</a>. Copyright © 2025 TradingView, Inc.</span>
+</footer>
+<div id="modal" data-popup role="dialog" aria-modal="true"><div class="box" id="modalbox"></div></div>
+<div id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const q = new URLSearchParams(location.search);
+const ctx = { bot: q.get("bot") || "first_hour_breakout", symbol: q.get("symbol") || "", day: q.get("day") || "", span: q.get("span") || "1d" };
+let S = null, chart, candles, indSeries = [], segSeries = [], selected = null, stopLine = null, targetLine = null;
+let quiz = null, quizAt = null;
+let mode = "pointer", drag = null, justDragged = false, draft = null, whyTime = null, replay = null, playTimer = null;
+
+function toast(msg, ms = 3500) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
+const hhmm = (sec) => new Date(sec * 1000).toISOString().slice(S && S.bot.timeframe === "1Day" ? 5 : 11, S && S.bot.timeframe === "1Day" ? 10 : 16);   // chart time is already New York time; daily bots show MM-DD
+const fmt = (x) => x == null ? "none" : Number(x).toFixed(2);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...ctx, ...body }) } : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+function makeChart() {
+  chart = LightweightCharts.createChart($("chart"), {
+    autoSize: true,
+    layout: { background: { color: css("--panel") }, textColor: css("--muted"), attributionLogo: true },
+    grid: { vertLines: { color: css("--line") }, horzLines: { color: css("--line") } },
+    rightPriceScale: { borderColor: css("--line") },
+    timeScale: { borderColor: css("--line"), timeVisible: true, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+  candles = chart.addCandlestickSeries({ upColor: css("--up"), downColor: css("--down"), borderVisible: false, wickUpColor: css("--up"), wickDownColor: css("--down") });
+  chart.subscribeClick(onClick);
+  let was = { w: 0, h: 0 };
+  new ResizeObserver(([e]) => {     // loaded in a hidden Studio tab: it fit to 0 px, so refit once it can be seen
+    const { width: w, height: h } = e.contentRect;
+    if ((was.w < 100 || was.h < 100) && w >= 100 && h >= 100 && S) chart.timeScale().fitContent();
+    was = { w, h };
+  }).observe($("chart"));
+}
+
+async function load(keepView) {
+  const range = keepView && chart ? chart.timeScale().getVisibleLogicalRange() : null;
+  try { S = await api(`/api/view?bot=${encodeURIComponent(ctx.bot)}&symbol=${encodeURIComponent(ctx.symbol)}&day=${encodeURIComponent(ctx.day)}${ctx.span !== "1d" ? "&span=" + encodeURIComponent(ctx.span) : ""}`); }
+  catch (e) { $("why").innerHTML = `<b>Could not load:</b> ${esc(e.message)}`; return; }
+  ctx.symbol = S.symbol; ctx.day = S.day;
+  history.replaceState(null, "", `?bot=${encodeURIComponent(ctx.bot)}&symbol=${S.symbol}&day=${S.day}${S.span ? "&span=" + S.span : ""}`);
+  $("title").textContent = `${S.bot.name} · ${S.symbol} · ${S.day}`;
+  $("status").textContent = S.bot.status; $("status").className = "pill " + (S.bot.status === "failed" ? "failed" : "");
+  $("account").textContent = S.account; $("account").className = "pill " + (S.account === "PAPER" ? "paper" : "live-money");
+  $("feed").textContent = S.live ? "live" : S.bot.timeframe === "1Day" ? "daily, to " + S.day : "past day"; $("feed").className = "pill" + (S.live ? " livefeed" : "");
+  $("source").textContent = "Data: " + S.source;
+  drawConfidence(S.confidence);
+  const ev = S.events || [];
+  $("events").hidden = !ev.length && !S.empty_reason;
+  $("events").textContent = S.empty_reason ? S.empty_reason : ev.length ? "⚠ " + ev.map((e) => e.event).join(" · ") : "";
+  $("events").title = ev.map((e) => `${e.event} (${e.source})`).join("\n");
+  const vs = S.vs_spy;
+  $("vsspy").hidden = !vs || !S.trades.some((t) => !t.open);
+  const usd = (x) => (x < 0 ? "-$" : "+$") + Math.abs(Math.round(x)).toLocaleString();
+  if (vs) $("vsspy").textContent = vs.spy_hold.usd == null ? "Beat just holding? can't tell (no SPY data)"
+    : `Beat just holding? ${{ beat: "yes", tie: "about even", trailed: "no" }[vs.result]}: bot ${usd(vs.bot_usd)} vs SPY ${usd(vs.spy_hold.usd)}`;
+  $("stopbtn").textContent = S.stopped ? "STOPPED · resume?" : "STOP";
+  $("stopbtn").classList.toggle("stopped", !!S.stopped);
+  $("labellink").href = `/label?bot=${encodeURIComponent(S.bot.id)}`;
+  $("f-symbol").value = S.symbol; $("f-day").value = S.day; $("f-span").value = S.span || "1d";
+  if (S.span) $("feed").textContent = `${$("f-span").selectedOptions[0].text}, ${S.candle} candles`;
+  if (S.note) { $("events").hidden = false; $("events").textContent = S.note; }
+  if (replay != null && replay >= S.candles.length) replay = null;
+  $("r-slider").max = Math.max(0, S.candles.length - 1);
+  draw();
+  if (range) chart.timeScale().setVisibleLogicalRange(range); else setTimeout(() => chart.timeScale().fitContent(), 50);   // after the layout settles
+  loadVetoCard();
+  ghostCard();
+  const keep = selected && [...S.trades, ...S.vetoed].find((t) => t.id === selected);
+  select(keep ? keep.id : (S.trades.at(-1) || S.vetoed.at(-1) || {}).id);
+  drawList();
+  if (whyTime) showWhy(whyTime);    // keep the answer current after a move or veto
+}
+
+function draw() {
+  const cut = replay == null ? Infinity : S.candles[replay].time;     // replay: only what the bot had seen by then
+  const mcut = quizAt != null ? quizAt - 1 : cut;                     // quiz: hide the answer on the asked candle
+  candles.setData(S.candles.filter((c) => c.time <= cut));
+  indSeries.forEach((s) => chart.removeSeries(s)); indSeries = [];
+  segSeries.forEach((s) => chart.removeSeries(s)); segSeries = [];
+  const colors = [css("--ind1"), css("--ind2"), "#7a8", "#a7a"];
+  const leg = [];
+  Object.entries(S.indicators).forEach(([name, pts], i) => {
+    const first = pts.findIndex((p) => p.value != null);
+    const gappy = first >= 0 && pts.slice(first).some((p) => p.value == null);   // sparse levels: dots, not joined lines
+    const s = chart.addLineSeries({ color: colors[i % 4], lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, title: "",
+      ...(gappy ? { lineVisible: false, pointMarkersVisible: true, pointMarkersRadius: 2 } : {}) });
+    s.setData(pts.filter((p) => p.time <= cut)); indSeries.push(s);
+    leg.push(`<span><i style="background:${colors[i % 4]}"></i>${esc(name.replace(/_/g, " "))}</span>`);
+  });
+  leg.push(`<span><i style="background:${css("--stop")}"></i>stop</span><span><i style="background:${css("--target")}"></i>target</span>`);
+  $("legend").innerHTML = leg.join("");
+  const shown = S.trades.filter((t) => t.t_in <= mcut);
+  for (const t of shown) {                       // stop / target segments for each trade's life
+    for (const [price, color] of [[t.stop, css("--stop")], [t.target, css("--target")]]) {
+      if (price == null) continue;
+      const s = chart.addLineSeries({ color, lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      s.setData([{ time: t.t_in, value: price }, { time: Math.max(t.t_in, Math.min(t.t_out, cut)), value: price }].filter((p, i, a) => i === 0 || p.time > a[0].time)); segSeries.push(s);
+    }
+  }
+  const m = [];
+  for (const t of shown) {
+    const long = t.side === "long";
+    m.push({ time: t.t_in, position: long ? "belowBar" : "aboveBar", color: long ? css("--up") : css("--down"), shape: long ? "arrowUp" : "arrowDown", text: long ? "BUY" : "SHORT" });
+    if (!t.open && t.t_out <= cut) m.push({ time: t.t_out, position: long ? "aboveBar" : "belowBar", color: css("--accent"), shape: "circle", text: `EXIT ${t.r > 0 ? "+" : ""}${t.r.toFixed(2)}R` });
+  }
+  if ($("g-show").checked) for (const g of (S.ghosts || []).filter((g) => g.t_in <= mcut)) {   // near misses, faded
+    const faded = css("--muted") + "88";
+    m.push({ time: g.t_in, position: g.side === "long" ? "belowBar" : "aboveBar", color: faded, shape: "circle", text: "ghost" });
+    if (g.t_out <= cut) {
+      m.push({ time: g.t_out, position: g.side === "long" ? "aboveBar" : "belowBar", color: faded, shape: "circle", text: `ghost ${g.r > 0 ? "+" : ""}${g.r.toFixed(2)}R` });
+      const s = chart.addLineSeries({ color: faded, lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      if (g.t_out > g.t_in) { s.setData([{ time: g.t_in, value: g.entry }, { time: g.t_out, value: g.exit }]); }
+      segSeries.push(s);
+    }
+  }
+  for (const v of S.vetoed.filter((v) => v.t <= mcut)) m.push({ time: v.t, position: v.side === "long" ? "belowBar" : "aboveBar", color: css("--veto"), shape: "square", text: "VETOED" });
+  m.sort((a, b) => a.time - b.time);
+  candles.setMarkers(m);
+}
+
+// Size by risk (paper): the account size and risk % are remembered in this browser only.
+const SZ = (() => { try { return JSON.parse(localStorage.getItem("botscope-size") || "null") || { acct: 10000, risk: 1 }; } catch { return { acct: 10000, risk: 1 }; } })();
+function sizeLine(t) {
+  const per = Math.abs(t.entry - t.stop);
+  if (!per || !(SZ.acct > 0) || !(SZ.risk > 0)) return "Set an account size and a risk % above 0.";
+  const byRisk = Math.floor(SZ.acct * SZ.risk / 100 / per), byCash = Math.floor(SZ.acct / t.entry), n = Math.min(byRisk, byCash);
+  return `<b>${n} shares</b> ($${(n * t.entry).toLocaleString(undefined, { maximumFractionDigits: 0 })}), risking $${(n * per).toFixed(2)}`
+    + (byCash < byRisk ? ` (capped: $${SZ.acct.toLocaleString()} only buys ${byCash})` : "");
+}
+function sizeHtml(t) {
+  setTimeout(() => {
+    const go = () => { SZ.acct = +$("sz-acct").value; SZ.risk = +$("sz-risk").value; try { localStorage.setItem("botscope-size", JSON.stringify(SZ)); } catch {} $("sz-out").innerHTML = sizeLine(t); };
+    if ($("sz-acct")) { $("sz-acct").oninput = go; $("sz-risk").oninput = go; }
+  });
+  return `<details class="size"><summary>Size by risk (paper)</summary>
+    <label class="muted">Account $ <input id="sz-acct" type="number" min="100" step="100" value="${SZ.acct}" style="width:80px"></label>
+    <label class="muted">Risk % <input id="sz-risk" type="number" min="0.1" max="10" step="0.1" value="${SZ.risk}" style="width:50px"></label>
+    <p id="sz-out">${sizeLine(t)}</p><p class="muted">Shares = account × risk % ÷ distance to the stop. Gaps can jump a stop. Nothing is ordered.</p></details>`;
+}
+function receiptHtml(r) {
+  const usd = (x) => (x < 0 ? "-$" : x > 0 ? "+$" : "$") + Math.abs(x).toFixed(2);
+  return `<details class="receipt"><summary>Receipt (paper, $${r.position_usd.toLocaleString()} position, about ${r.shares_about} shares)</summary>
+    <div class="kv"><span>Why in</span><span>${esc(r.why_in)}</span><span>Why out</span><span>${esc(r.why_out)}</span>
+    <span>Price move</span><span>${usd(r.price_move_usd)}</span><span>Costs</span><span>${usd(r.costs_usd)}</span>
+    <span>Slippage</span><span>${usd(r.slippage_usd)}</span><span>You keep</span><b>${usd(r.net_usd)}</b></div>
+    <p class="muted">${esc(r.note)}</p></details>`;
+}
+function select(id) {
+  selected = id || null;
+  if (stopLine) { candles.removePriceLine(stopLine); stopLine = null; }
+  if (targetLine) { candles.removePriceLine(targetLine); targetLine = null; }
+  const t = S.trades.find((x) => x.id === id), v = S.vetoed.find((x) => x.id === id);
+  if (t) {
+    stopLine = candles.createPriceLine({ price: t.stop, color: css("--stop"), lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: "STOP (drag)" });
+    if (t.target != null) targetLine = candles.createPriceLine({ price: t.target, color: css("--target"), lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: "TARGET (drag)" });
+    $("trade").innerHTML = `<div class="kv">
+      <span>Side</span><b>${t.side.toUpperCase()}${t.open ? " (open)" : ""}</b>
+      <span>In</span><span>${hhmm(t.t_in)} at ${fmt(t.entry)}</span>
+      <span>Stop</span><span>${fmt(t.stop)}${t.moved ? " (moved by you)" : ""}</span>
+      <span>Target</span><span>${fmt(t.target)}</span>
+      <span>Out</span><span>${t.open ? "still open" : `${hhmm(t.t_out)} at ${fmt(t.exit)}: ${esc(t.why_out)}`}</span>
+      <span>Result</span><b>${t.r == null ? "–" : (t.r > 0 ? "+" : "") + t.r.toFixed(2) + "R after costs"}</b>
+    </div><p class="muted">Why in: ${esc(t.why_in)}</p>${t.receipt ? receiptHtml(t.receipt) : ""}${sizeHtml(t)}
+    <div class="row"><button class="danger" id="b-veto">This looks bad, I wouldn't take it</button></div>`;
+    $("b-veto").onclick = () => askVeto(t);
+  } else if (v) {
+    $("trade").innerHTML = `<div class="kind vetoed">Vetoed by you</div>
+      <p>${v.side.toUpperCase()} at ${fmt(v.price)}, ${hhmm(v.t)}. ${v.reason_you_gave ? "Your reason: " + esc(v.reason_you_gave) : ""}</p>
+      <p class="muted">If taken: ${v.would_have_r == null ? "not known yet" : `${v.would_have_r > 0 ? "+" : ""}${v.would_have_r.toFixed(2)}R (${esc(v.would_have_exit)})`}. This feeds the future veto scorecard.</p>
+      <button id="b-undo">Undo veto</button>`;
+    $("b-undo").onclick = async () => { await api("/api/undo_veto", { trade_id: v.id }); toast("Veto removed"); load(true); };
+  } else {
+    $("trade").innerHTML = `<span class="muted">The bot took no trades this day. Click a candle to see why.</span>`;
+  }
+}
+
+function ghostCard() {
+  const g = S.ghosts || [];
+  if (!g.length) { $("ghostcard").innerHTML = `<span class="muted">No near misses this day. A near miss is a trade one filter blocked; the bot has to say what it almost did.</span>`; return; }
+  const tot = g.reduce((a, x) => a + x.r, 0);
+  $("ghostcard").innerHTML = `<div class="kind ghost">${g.length} near miss${g.length > 1 ? "es" : ""}: ${tot > 0 ? "+" : ""}${tot.toFixed(2)}R if taken</div>
+    ${g.map((x) => `<div class="muted">${hhmm(x.t_in)} ${x.side} → ${esc(x.why_out)}: <b>${x.r > 0 ? "+" : ""}${x.r.toFixed(2)}R</b></div>`).join("")}
+    <p class="muted">${tot < 0 ? "The filter saved you here." : tot > 0 ? "The filter cost you here." : "No difference here."} One day is luck; the honest report adds them up over years.</p>`;
+}
+
+function showWhy(time) {
+  const r = S.reasons[String(time)];
+  if (!r) return;
+  whyTime = time;
+  const iso = new Date(time * 1000).toISOString(), zday = iso.slice(0, 10), zt = S.bot.timeframe === "1Day" ? "" : iso.slice(11, 16);
+  $("why").innerHTML = `<div class="t">${hhmm(time)}</div><div class="kind ${r.kind}">${r.kind.replace("_", " ")}</div><div>${esc(r.reason)}</div>
+    <a href="/zoom?symbol=${encodeURIComponent(S.symbol)}&day=${zday}&t=${zt}" target="_blank" rel="noopener" title="The same moment on 1-minute, 15-minute and daily candles">Zoom stack: see this moment zoomed out →</a>`;
+}
+
+$("g-show").onchange = () => draw();
+$("stopbtn").onclick = async () => {
+  if (!S.stopped) { await api("/api/stop", {}); toast("STOPPED: every order is blocked and every bot is off."); return load(true); }
+  modal(`<h3>Resume?</h3><p>Bots go back to today's on/off list and orders are allowed again.</p>
+    <div class="row"><button class="on" id="rs-yes">Resume</button><button id="rs-no">Stay stopped</button></div>`);
+  $("rs-no").onclick = closeModal;
+  $("rs-yes").onclick = async () => { await api("/api/resume", { confirm: true }); closeModal(); toast("Resumed"); load(true); };
+};
+
+function onClick(p) {
+  if (justDragged || mode !== "pointer" || p.time == null) return;
+  showWhy(p.time);
+  const hit = [...S.trades.map((t) => [t.id, t.t_in, t.t_out]), ...S.vetoed.map((v) => [v.id, v.t, v.t])].find(([, a, b]) => p.time >= a && p.time <= b);
+  if (hit && hit[0] !== selected) select(hit[0]);
+}
+
+// ---- confidence meter: five levels, never a percentage ----
+function drawConfidence(c) {
+  const col = ["--down", "--down", "--ind2", "--up", "--up"][c.step];
+  $("conf").querySelector(".bars").innerHTML = c.levels.map((_, i) => `<i style="${i <= c.step ? `background:${css(col)}` : ""}"></i>`).join("");
+  $("conf").querySelector("b").textContent = c.level;
+  $("conf").setAttribute("aria-label", `Confidence: ${c.level} (${c.step + 1} of 5)`);
+}
+$("conf").addEventListener("click", () => {
+  const c = S.confidence;
+  modal(`<h3>Confidence: ${esc(c.level)}</h3>
+    <ul>${c.why.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+    <p class="muted">${c.untested_trades} untested backtest trades · ${c.live.trades} live paper trades. ${esc(c.note)}</p>
+    <button onclick="closeModal()">OK</button>`);
+});
+
+// ---- modal (scope question, veto reason) ----
+function modal(html) {
+  $("modalbox").innerHTML = `<button type="button" class="bs-x" aria-label="Close" title="Close (Esc)">×</button>` + html;
+  $("modalbox").querySelector(".bs-x").onclick = () => { closeModal(); load(true); };
+  $("modal").style.display = "flex";
+}
+$("modal").bsClose = () => { closeModal(); load(true); };     // Esc: same as a click outside
+function closeModal() { $("modal").style.display = "none"; }
+$("modal").addEventListener("click", (e) => { if (e.target.id === "modal") { closeModal(); load(true); } });
+
+$("teachbtn").addEventListener("click", async () => {
+  let L;
+  try { L = await api(`/api/teach?bot=${encodeURIComponent(ctx.bot)}&symbol=${encodeURIComponent(ctx.symbol)}&day=${encodeURIComponent(ctx.day)}`); }
+  catch (e) { toast("Could not load the lesson: " + e.message); return; }
+  const words = Object.entries(L.words_used).map(([k, v]) => `<li><b>${esc(k)}</b>: ${esc(v)}</li>`).join("");
+  modal(`<h3>Teach me: ${esc(L.bot)} · ${esc(L.symbol)} · ${esc(L.day)}</h3>
+    <div style="max-height:60vh;overflow:auto">
+    ${L.lesson.map((p) => `<h4>${esc(p.title)}</h4><ul>${p.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`).join("")}
+    ${words ? `<h4>Words I used</h4><ul class="muted">${words}</ul>` : ""}
+    <p><b>${esc(L.quiz)}</b></p></div>
+    <p class="muted">${esc(L.note)} Data: ${esc(L.data)}</p>
+    <div class="row"><button onclick="closeModal()">Close</button></div>`);
+});
+
+let WI = null;
+function wiRender() {
+  const sx = WI.stop_x[+$("wi-stop").value], tr = WI.target_r[+$("wi-tgt").value];
+  const c = WI.cells.find((x) => x.stop_x === sx && x.target_r === tr), b = WI.baseline;
+  $("wi-stop-l").textContent = `Stop ${sx}x as far`;
+  $("wi-tgt-l").textContent = tr == null ? "Target: the bot's own" : `Target ${tr}x the risk`;
+  const row = (k, label, f) => `<tr><td>${label}</td><td class="n">${f(b[k])}</td><td class="n"><b>${f(c[k])}</b></td></tr>`;
+  const ofN = (x) => (x.wins == null ? "–" : `${x.wins} of ${x.trades}`);   // older saved grids have no count
+  const r = (v) => (v > 0 ? "+" : "") + Number(v).toFixed(2) + "R", usd = (v) => (v < 0 ? "-$" : "$") + Math.abs(Math.round(v)).toLocaleString();
+  $("wi-table").innerHTML = `<table style="width:100%;font-size:13px"><tr><th></th><th class="n">As is</th><th class="n">What if</th></tr>
+    ${row("trades", "Trades", (v) => v)}${row("total_r", "Total", r)}<tr><td>Wins</td><td class="n">${ofN(b)}</td><td class="n"><b>${ofN(c)}</b></td></tr>
+    ${row("avg_usd_per_win", "$ per win", usd)}${row("net_usd", "Net $", usd)}${row("worst_losing_streak", "Worst streak", (v) => v)}</table>`;
+}
+async function tmLoad() {
+  $("tm-body").innerHTML = `<span class="muted">Replaying the untested days…</span>`;
+  let M;
+  try { M = await api(`/api/timemap?bot=${encodeURIComponent(ctx.bot)}`); }
+  catch (e) { $("tm-body").innerHTML = `<p class="muted">Could not run: ${esc(e.message)}</p><button id="tm-load">Try again</button>`; $("tm-load").onclick = tmLoad; return; }
+  const big = Math.max(0.01, ...M.rows.map((r) => Math.abs(r.total_r)));
+  $("tm-body").innerHTML = !M.rows.length ? `<p class="muted">No trades on the untested days.</p>` : `
+    <table style="width:100%;font-size:13px"><tr><th>${M.by === "weekday" ? "Day" : "Hour (ET)"}</th><th class="n">Trades</th><th class="n">Wins</th><th>Total</th></tr>
+    ${M.rows.map((r) => `<tr title="${esc(r.verdict)}"><td>${esc(r.when)}</td><td class="n">${r.trades}</td><td class="n">${r.wins} of ${r.trades}</td>
+      <td><span style="display:inline-block;height:9px;width:${Math.round(Math.abs(r.total_r) / big * 60)}px;background:var(${r.total_r >= 0 ? "--up" : "--down"});opacity:${r.trades < 5 ? .4 : 1}"></span> ${r.total_r > 0 ? "+" : ""}${r.total_r}R</td></tr>`).join("")}</table>
+    <p><b>${esc(M.hint)}</b></p><p class="muted">${esc(M.symbols.join(", "))}, ${esc(M.window.from)} to ${esc(M.window.to)}. Faded bars: under 5 trades. ${esc(M.note)}</p>`;
+}
+async function alLoad() {
+  $("al-body").innerHTML = `<span class="muted">Matching days and replaying the bot…</span>`;
+  let A;
+  try { A = await api(`/api/alike?bot=${encodeURIComponent(ctx.bot)}&symbol=${encodeURIComponent(ctx.symbol)}`); }
+  catch (e) { $("al-body").innerHTML = `<p class="muted">Could not run: ${esc(e.message)}</p><button id="al-load">Try again</button>`; $("al-load").onclick = alLoad; return; }
+  $("al-body").innerHTML = `<p class="muted">Today (as of ${esc(A.today.as_of_close)} close): <b>${esc(A.today.weather)}</b></p>
+    <table style="width:100%;font-size:13px"><tr><th>Day</th><th>Alike</th><th>Bot</th></tr>
+    ${A.days.map((r) => `<tr><td><a href="#" data-day="${esc(r.day)}">${esc(r.day)}</a> <span class="chip">${esc(r.period)}</span></td><td>${esc(r.how_alike)}</td><td>${r.trades ? (r.total_r > 0 ? "+" : "") + r.total_r + "R" : "no trade"}</td></tr>`).join("")}</table>
+    <p><b>${esc(A.summary)}</b></p><p class="muted">${esc(A.sample_note)} ${esc(A.how)} ${esc(A.note)}</p>`;
+  $("al-body").querySelectorAll("a[data-day]").forEach((a) => a.onclick = (e) => { e.preventDefault(); ctx.day = a.dataset.day; load(false); });
+}
+async function wiLoad(refresh) {
+  $("wi-body").innerHTML = `<span class="muted">Replaying the untested days with 30 settings…</span>`;
+  try { WI = await api(`/api/whatif?bot=${encodeURIComponent(ctx.bot)}${refresh ? "&refresh=1" : ""}`); }
+  catch (e) { $("wi-body").innerHTML = `<p class="muted">Could not run: ${esc(e.message)}</p><button id="wi-load">Try again</button>`; $("wi-load").onclick = () => wiLoad(false); return; }
+  $("wi-body").innerHTML = `
+    <label class="muted" id="wi-stop-l" for="wi-stop"></label><input id="wi-stop" type="range" min="0" max="${WI.stop_x.length - 1}" value="${WI.stop_x.indexOf(1)}" style="width:100%">
+    <label class="muted" id="wi-tgt-l" for="wi-tgt"></label><input id="wi-tgt" type="range" min="0" max="${WI.target_r.length - 1}" value="0" style="width:100%">
+    <div id="wi-table"></div>
+    ${WI.warning ? `<p class="muted"><b>${esc(WI.warning)}</b></p>` : ""}
+    <p class="muted">${esc(WI.symbols.join(", "))}, untested ${esc(WI.window.from)} to ${esc(WI.window.to)}, $${WI.position_size_usd.toLocaleString()} a trade, after costs.
+    Picking the best-looking setting here makes these days tuned for it: test it on other days before changing the rule.</p>
+    <button id="wi-refresh">Re-run</button>`;
+  $("wi-stop").oninput = wiRender; $("wi-tgt").oninput = wiRender; $("wi-refresh").onclick = () => wiLoad(true);
+  wiRender();
+}
+$("wi-load").onclick = () => wiLoad(false);
+$("al-load").onclick = alLoad;
+$("tm-load").onclick = tmLoad;
+
+function askScope(t, which, price) {
+  modal(`<h3>Move the ${which} to ${fmt(price)}?</h3>
+    <p class="muted">Was ${fmt(which === "stop" ? t.stop : t.target)}.</p>
+    <div class="row"><button class="on" id="s-trade">Just this trade</button><button id="s-rule">The rule for all future trades</button><button id="s-cancel">Cancel</button></div>
+    <p class="muted">Rule changes are saved as an idea and backtested first. Nothing changes until you approve the test.</p>`);
+  const send = async (scope) => {
+    if (S.account !== "PAPER" && !confirm("This is REAL MONEY. Change it?")) return;
+    try {
+      const r = await api("/api/move", { trade_id: t.id, [which]: price, scope, confirm: S.account !== "PAPER" });
+      closeModal();
+      toast(scope === "rule" ? "Saved as a rule idea. Ask Claude to backtest it first." : `Moved. The day was replayed with your ${which}.`);
+      load(true);
+    } catch (e) { toast(e.message); }
+  };
+  $("s-trade").onclick = () => send("this_trade");
+  $("s-rule").onclick = () => send("rule");
+  $("s-cancel").onclick = () => { closeModal(); load(true); };
+}
+
+function askVeto(t) {
+  modal(`<h3>Veto this ${t.side} trade?</h3>
+    <p class="muted">Paper: the bot skips it. The veto is saved on this computer for your future veto scorecard.</p>
+    <textarea id="v-why" rows="2" style="width:100%" placeholder="Why? (optional, e.g. 'chasing a big candle')"></textarea>
+    <div class="row" style="margin-top:8px"><button class="danger" id="v-yes">Veto it</button><button id="v-no">Cancel</button></div>`);
+  $("v-yes").onclick = async () => {
+    try { await api("/api/veto", { trade_id: t.id, reason: $("v-why").value }); closeModal(); toast("Vetoed. The bot skips it (paper)."); load(true); }
+    catch (e) { toast(e.message); }
+  };
+  $("v-no").onclick = closeModal;
+}
+
+// ---- drag the stop / target lines ----
+const chartEl = $("chartwrap");
+function lineNear(y) {
+  const t = S && S.trades.find((x) => x.id === selected);
+  if (!t) return null;
+  for (const [which, price] of [["stop", t.stop], ["target", t.target]]) {
+    if (price == null) continue;
+    const ly = candles.priceToCoordinate(price);
+    if (ly != null && Math.abs(ly - y) < 7) return { which, t };
+  }
+  return null;
+}
+const localY = (e) => e.clientY - chartEl.getBoundingClientRect().top;
+chartEl.addEventListener("mousemove", (e) => {
+  if (mode !== "pointer") return;
+  if (drag) {
+    const price = candles.coordinateToPrice(localY(e));
+    if (price != null) { drag.price = price; (drag.which === "stop" ? stopLine : targetLine).applyOptions({ price }); }
+    return;
+  }
+  chartEl.style.cursor = lineNear(localY(e)) ? "ns-resize" : "";
+});
+chartEl.addEventListener("mousedown", (e) => {
+  if (mode !== "pointer") return;
+  const hit = lineNear(localY(e));
+  if (!hit) return;
+  drag = { ...hit, price: null };
+  chart.applyOptions({ handleScroll: false, handleScale: false });
+  e.preventDefault();
+}, true);
+window.addEventListener("mouseup", () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  chart.applyOptions({ handleScroll: true, handleScale: true });
+  justDragged = true; setTimeout(() => justDragged = false, 50);
+  if (d.price != null) askScope(d.t, d.which, Math.round(d.price * 100) / 100);
+});
+
+// ---- drawing (line, circle) on an overlay canvas, stored in time/price so it stays put when you zoom ----
+const cv = $("overlay"), g = cv.getContext("2d");
+function setMode(m) {
+  mode = m;
+  for (const k of ["pointer", "line", "circle", "note"]) $("m-" + k).classList.toggle("on", k === m);
+  cv.classList.toggle("drawing", m !== "pointer");
+}
+["pointer", "line", "circle", "note"].forEach((k) => $("m-" + k).onclick = () => setMode(k));
+function toPoint(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const time = chart.timeScale().coordinateToTime(x), price = candles.coordinateToPrice(y);
+  return time == null || price == null ? null : { time, price };
+}
+const xy = (p) => [chart.timeScale().timeToCoordinate(p.time), candles.priceToCoordinate(p.price)];
+cv.addEventListener("mousedown", (e) => {
+  const p = toPoint(e);
+  if (!p) return;
+  if (mode === "note") {                       // pin a note to the clicked candle
+    const c = S.candles.find((x) => x.time === p.time), at = { time: p.time, price: c ? c.high : p.price };
+    modal(`<h3>Note on the ${hhmm(at.time)} candle</h3>
+      <textarea id="d-note" rows="3" style="width:100%" placeholder="e.g. 'news hit here' or 'I would have waited for this candle'"></textarea>
+      <div class="row" style="margin-top:8px"><button class="on" id="d-save">Pin note</button><button id="d-cancel">Cancel</button></div>`);
+    $("d-save").onclick = async () => {
+      try { await api("/api/drawings", { kind: "note", points: [at], note: $("d-note").value }); closeModal(); toast("Pinned. Claude can read it now."); setMode("pointer"); load(true); }
+      catch (e) { toast(e.message); }
+    };
+    $("d-cancel").onclick = closeModal;
+    return;
+  }
+  draft = { kind: mode, points: [p, p] };
+});
+cv.addEventListener("mousemove", (e) => { if (draft) { const p = toPoint(e); if (p) draft.points[1] = p; } });
+cv.addEventListener("mouseup", () => {
+  if (!draft) return;
+  const d = draft; draft = null;
+  if (d.points[0].time === d.points[1].time && d.points[0].price === d.points[1].price) return;
+  modal(`<h3>Add a note to your ${d.kind}?</h3>
+    <textarea id="d-note" rows="2" style="width:100%" placeholder="e.g. 'bad trades look like this' or 'stop goes here'"></textarea>
+    <div class="row" style="margin-top:8px"><button class="on" id="d-save">Save</button><button id="d-cancel">Discard</button></div>`);
+  $("d-save").onclick = async () => {
+    try { await api("/api/drawings", { kind: d.kind, points: d.points, note: $("d-note").value }); closeModal(); toast("Saved. Claude can read it now."); setMode("pointer"); load(true); }
+    catch (e) { toast(e.message); }
+  };
+  $("d-cancel").onclick = closeModal;
+});
+function shape(d, dashed) {
+  const [a, b] = d.points.map(xy);
+  if (a[0] == null || a[1] == null || b[0] == null || b[1] == null) return;
+  if (d.kind === "note") {                     // a pin above the candle, with the note beside it
+    g.setLineDash([]); g.beginPath(); g.arc(a[0], a[1] - 10, 5, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(a[0], a[1] - 5); g.lineTo(a[0], a[1]); g.stroke();
+    g.fillText(d.note.slice(0, 40), a[0] + 8, a[1] - 7); return;
+  }
+  g.beginPath(); g.setLineDash(dashed ? [5, 4] : []);
+  if (d.kind === "line") { g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+  else g.ellipse((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(2, Math.abs(b[0] - a[0]) / 2), Math.max(2, Math.abs(b[1] - a[1]) / 2), 0, 0, Math.PI * 2);
+  g.stroke();
+  if (d.note) { g.setLineDash([]); g.fillText(d.note.slice(0, 40), Math.max(a[0], b[0]) + 6, Math.min(a[1], b[1])); }
+}
+function paint() {
+  const r = chartEl.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  if (cv.width !== Math.round(r.width * dpr) || cv.height !== Math.round(r.height * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  if (S) {
+    g.strokeStyle = g.fillStyle = css("--draw"); g.lineWidth = 2; g.font = "12px -apple-system, sans-serif";
+    S.drawings.forEach((d) => shape(d, false));
+    if (draft) shape(draft, true);
+  }
+  requestAnimationFrame(paint);
+}
+function drawList() {
+  $("drawlist").innerHTML = S.drawings.map((d) => `<div class="row" style="align-items:center;justify-content:space-between;margin-top:4px">
+    <span>${{ line: "／", circle: "◯", note: "📌" }[d.kind]} ${hhmm(d.points[0].time)}${d.note ? " · " + esc(d.note.slice(0, 28)) : ""}</span>
+    <button data-del="${d.id}" title="Delete drawing">✕</button></div>`).join("");
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => { await api("/api/drawings/delete", { id: b.dataset.del }); load(true); });
+}
+
+// ---- replay: scrub through the day and watch each decision ----
+function setReplay(i) {
+  replay = i;
+  if (i == null) { $("r-time").textContent = ""; draw(); chart.timeScale().fitContent(); return; }
+  if (replay === 0 || !chart.timeScale().getVisibleLogicalRange()) chart.timeScale().setVisibleLogicalRange({ from: -2, to: S.candles.length + 2 });
+  $("r-slider").value = i; $("r-time").textContent = hhmm(S.candles[i].time);
+  draw(); showWhy(S.candles[i].time);
+}
+function stopPlay() { clearInterval(playTimer); playTimer = null; $("r-play").textContent = "▶ Play"; }
+$("r-play").onclick = () => {
+  if (playTimer) return stopPlay();
+  if (replay == null || replay >= S.candles.length - 1) { setReplay(0); chart.timeScale().setVisibleLogicalRange({ from: -2, to: S.candles.length + 2 }); }
+  $("r-play").textContent = "⏸ Pause";
+  playTimer = setInterval(() => { if (replay >= S.candles.length - 1) return stopPlay(); setReplay(replay + 1); }, +$("r-speed").value);
+};
+// ---- quiz: guess what the bot does on a candle, then see its real answer (paper; only the score is saved, locally) ----
+function quizPoints() {
+  const idx = (t) => S.candles.findIndex((c) => c.time === t);
+  const ent = S.trades.map((t) => idx(t.t_in)).filter((i) => i > 0);
+  const quiet = S.candles.map((c, i) => [i, S.reasons[String(c.time)]])
+    .filter(([i, r]) => r && r.kind === "no_trade" && i > 0 && i < S.candles.length - 1).map(([i]) => i);
+  const n = Math.max(2, ent.length), pick = [];                 // as many quiet candles as entries, spread over the day
+  for (let k = 1; k <= n && quiet.length; k++) pick.push(quiet[Math.floor(k * quiet.length / (n + 1))]);
+  return [...new Set([...ent, ...pick])].sort((a, b) => a - b).slice(0, 8);
+}
+function quizAsk() {
+  if (!quiz.left.length) {
+    $("why").innerHTML = `<div class="kind">quiz done</div><div>You matched the bot on <b>${quiz.hits} of ${quiz.n}</b> candles.
+      Matching the bot doesn't make a trade good: the R on each trade says that.</div><div id="q-week" class="muted"></div>`;
+    const { hits, n } = quiz;
+    quiz = null; quizAt = null; select(null); draw();            // the trade card comes back
+    api("/api/quiz", { hits, n }).then((r) => { $("q-week").textContent = `Last 7 days: matched the bot on ${r.week.hits} of ${r.week.candles} candles in ${r.week.quizzes} quiz${r.week.quizzes === 1 ? "" : "zes"}.` + (r.counted ? "" : " (A retake of this day doesn't count.)"); }).catch(() => {});
+    return;
+  }
+  const i = quiz.left[0], t = S.candles[i].time;
+  stopPlay(); select(null); $("trade").innerHTML = `<span class="muted">Hidden during the quiz.</span>`; quizAt = t; replay = i; $("r-slider").value = i; $("r-time").textContent = hhmm(t); draw();
+  $("why").innerHTML = `<div class="t">${hhmm(t)} · question ${quiz.n - quiz.left.length + 1} of ${quiz.n}</div>
+    <div>This candle just closed. What does the bot do?</div>
+    <div class="row" style="margin-top:6px"><button data-q="long">Buy</button><button data-q="short">Short</button><button data-q="wait">Wait</button></div>`;
+  $("why").querySelectorAll("button").forEach((b) => { b.onclick = () => quizAnswer(b.dataset.q, i); });
+}
+function quizAnswer(guess, i) {
+  const t = S.candles[i].time, tr = S.trades.find((x) => x.t_in === t), truth = tr ? tr.side : "wait";
+  const said = { long: "buy", short: "short", wait: "wait" };
+  quiz.hits += guess === truth ? 1 : 0; quiz.left.shift(); quizAt = null; draw(); showWhy(t);
+  $("why").insertAdjacentHTML("afterbegin", `<div><b>${guess === truth ? "✓ Same as the bot" : "✗ The bot's answer: " + said[truth]}</b></div>`);
+  $("why").insertAdjacentHTML("beforeend", `<div class="row" style="margin-top:6px"><button id="q-next">${quiz.left.length ? "Next question" : "See score"}</button></div>`);
+  $("q-next").onclick = quizAsk;
+}
+$("r-quiz").onclick = () => {
+  const pts = quizPoints();
+  if (!pts.length) return toast("No candles to quiz on for this day.");
+  quiz = { left: pts, n: pts.length, hits: 0 }; quizAsk();
+};
+$("r-speed").onchange = () => { if (playTimer) { stopPlay(); $("r-play").click(); } };
+$("r-slider").oninput = () => { stopPlay(); setReplay(+$("r-slider").value); };
+$("r-all").onclick = () => { stopPlay(); setReplay(null); };
+
+// ---- your vetoes: did skipping trades help or hurt? ----
+async function loadVetoCard() {
+  let v;
+  try { v = await api(`/api/veto_scorecard?bot=${encodeURIComponent(ctx.bot)}`); } catch (e) { return; }
+  if (!v.vetoes) return;
+  const net = v.net_r_saved, col = net > 0 ? "var(--up)" : net < 0 ? "var(--down)" : "var(--muted)";
+  $("vetocard").innerHTML = `<div class="row" style="gap:14px;align-items:baseline">
+      <b style="font-size:22px;color:${col}">${Math.abs(net).toFixed(2)}R</b><span class="muted">${net >= 0 ? "saved by your vetoes" : "missed because of your vetoes"}</span></div>
+    <div class="row" style="margin:6px 0"><span class="pill" style="color:var(--up)">${v.helped} helped</span><span class="pill" style="color:var(--down)">${v.hurt} hurt</span><span class="pill">${v.vetoes} total</span></div>
+    <div class="muted">${esc(v.verdict)}</div>`;
+}
+
+$("f-span").onchange = () => $("pick").requestSubmit();
+$("pick").onsubmit = (e) => { e.preventDefault(); ctx.symbol = $("f-symbol").value.toUpperCase(); ctx.day = $("f-day").value; ctx.span = $("f-span").value; selected = null; whyTime = null; stopPlay(); replay = null; $("why").innerHTML = ""; load(false); };
+makeChart(); load(false); paint();
+setInterval(() => { if (S && S.live && replay == null && !drag && !draft && $("modal").style.display !== "flex") load(true); }, 30000);   // live day: refresh every 30 s
+</script>
+<script>
+// Tutorial: a hands-on lesson path on a practice bot. Each step checks off when you really do it; skip or restart
+// anytime. Progress is remembered in this browser only.
+(function () {
+  const KEY = "botscope-lesson-v1";
+  const STEPS = [
+    ["chart", "Open a bot's chart", "You're here. The practice bot is First hour breakout (a plain textbook example, never tuned and not one to trade, so it's a safe one to poke at)."],
+    ["why", "Ask \"why not here?\"", "Click any candle: the bot says what it decided there and why."],
+    ["teach", "Let the bot teach you", "Press Teach me and step through the day."],
+    ["veto", "Veto a trade", "Click a trade, then \"This looks bad, I wouldn't take it\". The veto scorecard later shows if you were right."],
+    ["label", "Read the honest numbers", "Open the Label: untested results, worst drop, costs, and whether it beat just holding SPY. For a full report, ask Claude: \"honest report for First hour breakout\"."],
+    ["stop", "Press STOP", "The big red button blocks every order and turns every bot off. Press it once, then resume."],
+  ];
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } };
+  let L = load();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(L)); } catch { /* private window: this visit only */ } };
+  function render() {
+    $("lesson").hidden = !L || L.closed;
+    if (!L || L.closed) return;
+    const n = STEPS.filter(([k]) => L.done[k]).length, next = STEPS.find(([k]) => !L.done[k]);
+    $("lesson-body").innerHTML = `<p class="muted">${n} of ${STEPS.length} done</p>` + STEPS.map(([k, t, help]) =>
+      `<div style="margin:4px 0"><b>${L.done[k] ? "✓" : next && next[0] === k ? "→" : "○"} ${esc(t)}</b>${next && next[0] === k ? `<div class="muted">${esc(help)}</div>` : ""}</div>`).join("")
+      + (next ? "" : `<p><b>Done.</b> You've used every safety and honesty tool. Next: make your own bot, ask Claude "new bot".</p>`)
+      + `<div class="row"><button id="lesson-skip">${next ? "Skip this step" : "Close"}</button><button id="lesson-restart">Restart</button><button id="lesson-close">Hide</button></div>`;
+    $("lesson-skip").onclick = () => { if (next) { L.done[next[0]] = "skipped"; } else L.closed = true; save(); render(); };
+    $("lesson-restart").onclick = () => { L = { done: { chart: true } }; save(); render(); };
+    $("lesson-close").onclick = () => { L.closed = true; save(); render(); };
+  }
+  function mark(k) { if (L && !L.closed && !L.done[k]) { L.done[k] = true; save(); render(); } }
+  window.lessonMark = mark;
+  $("lesson").bsClose = () => { if (L) { L.closed = true; save(); } render(); };   // Esc hides it like "Hide"
+  $("lessonbtn").onclick = () => { L = L && !L.closed ? L : { done: { chart: true } }; L.closed = false; save(); render(); $("lesson").scrollIntoView({ block: "nearest" }); };
+  const _why = showWhy; showWhy = (t) => { _why(t); mark("why"); };
+  const _api = api; api = async (path, body) => { const r = await _api(path, body);
+    const p = path.split("?")[0];                 // exact paths: /api/veto_scorecard must not count as a veto
+    if (p === "/api/veto") mark("veto"); if (p === "/api/stop") mark("stop"); if (p === "/api/teach") mark("teach"); return r; };
+  $("labellink").addEventListener("click", () => mark("label"));
+  render();
+  if (new URLSearchParams(location.search).get("lesson")) $("lessonbtn").click();   // Studio's Tutorial tab
+})();
+</script>
+<script src="/tour.js"></script>
+<script>
+botscopeTour("chart", [
+  { title: "Welcome to BotScope", text: "This is one bot on one day. A 2-minute tour shows where everything is. Paper trading only, and nothing here is financial advice." },
+  { el: "#chart", title: "The chart", text: "Candles are the price. Boxes show the bot's trades: where it got in, its stop (red) and its target (green)." },
+  { el: "#account", title: "Paper or live", text: "This pill always says which account you're looking at. BotScope is built for paper trading." },
+  { el: "#conf", title: "Confidence meter", text: "Five levels from very low to very high, built only from untested days. Click it to see why and what would move it up." },
+  { el: "#vsspy", title: "Beat just holding?", text: "Did the bot beat simply putting the same $10,000 into SPY over the same days?" },
+  { el: "#why", title: "Why not here?", text: "Click any candle and the bot explains what it decided there, and why." },
+  { el: "#al-load", title: "Days like today", text: "Finds past days whose market looked like today's and shows what the bot did on them." },
+  { el: "#teachbtn", title: "Teach me", text: "The bot walks you through the day step by step, like a tutor." },
+  { el: "#labellink", title: "Nutrition label", text: "The honest one-page summary: untested results, worst drop, costs, and whether it beat holding SPY." },
+  { el: "#stopbtn", title: "STOP", text: "One click blocks every order and turns every bot off. You can always resume." },
+  { el: "#lessonbtn", title: "Learn by doing", text: "Tutorial walks you through each tool on a practice bot; steps check off as you do them." },
+  { title: "That's it", text: "Press Tour in the top bar to see this again. Ask Claude anything about what you see." }
+], { button: "#tourbtn" });
+</script>
+</body>
+</html>

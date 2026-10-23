@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/theme.js"></script>
+<title>Bot Nutrition Label</title>
+<style>
+:root { --bg: #f7f7f5; --panel: #ffffff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --mid: #c27c0e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --mid: #e0a23a; } }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --mid: #e0a23a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.35 Helvetica, Arial, sans-serif; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 16px; }
+.label { background: var(--panel); border: 2px solid var(--ink); padding: 8px 10px 10px; width: 100%; max-width: 380px; }
+h1 { font: 900 32px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 0; letter-spacing: -.5px; }
+.sub { font-size: 13px; padding-bottom: 4px; border-bottom: 10px solid var(--ink); }
+.sub b { font-size: 15px; }
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--ink); }
+.row span:first-child { font-weight: 700; }
+.row span:last-child { text-align: right; text-wrap: balance; }
+.row.thick { border-bottom: 5px solid var(--ink); }
+.missing { color: var(--muted); font-style: italic; }
+.conf { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 10px solid var(--ink); font-weight: 900; font-size: 18px; }
+.bars { display: inline-flex; gap: 3px; } .bars i { width: 14px; height: 14px; border: 1px solid var(--ink); }
+.foot { font-size: 11px; color: var(--muted); padding-top: 6px; }
+.err { color: var(--down); }
+a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+button.q { all: unset; cursor: help; border-bottom: 1px dotted currentColor; }
+button.q:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.changed { margin: 6px 0; padding: 6px 8px; border: 2px solid var(--down); font-size: 13px; }
+.help { font-size: 12px; opacity: .75; padding: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="label" id="label"><span class="muted">Loading…</span></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const bot = new URLSearchParams(location.search).get("bot") || "";
+const thick = new Set(["Timeframe / sides", "Total, after costs", "Costs took", "Near misses"]);
+fetch(`/api/label?bot=${encodeURIComponent(bot)}`).then((r) => r.json()).then((L) => {
+  if (L.error) { $("label").innerHTML = `<p class="err">${esc(L.error)}</p>`; return; }
+  document.title = `${L.bot} Label`;
+  const c = L.confidence, col = ["--down", "--down", "--mid", "--up", "--up"][c.step];
+  const rows = L.rows.filter((r) => r.label !== "Confidence").map((r) =>
+    `<div class="row${thick.has(r.label) ? " thick" : ""}"><span>${r.help ? `<button type="button" class="q" title="${esc(r.help)}" aria-expanded="false">${esc(r.label)}</button>` : esc(r.label)}</span><span class="${r.value === "not measured yet" ? "missing" : ""}">${esc(r.value)}</span></div>${r.help ? `<div class="help" hidden data-popup>${esc(r.help)}</div>` : ""}`).join("");
+  $("label").innerHTML = `<h1>Bot Facts</h1>
+    <div class="sub"><b>${esc(L.bot)}</b> v${esc(L.version)}<br>${esc(L.description)}</div>
+    ${L.bot_changed ? `<p class="changed">⚠ ${esc(L.bot_changed)}</p>` : ""}
+    ${rows}
+    <div class="conf"><span>Confidence</span><span><span class="bars">${c.levels.map((_, i) => `<i style="${i <= c.step ? `background:var(${col})` : ""}"></i>`).join("")}</span> ${esc(c.level)}</span></div>
+    <div class="foot">${esc(c.why.join("; "))}.<br>${c.next_level ? "To move up: " + esc(c.next_level) + ".<br>" : ""}${L.missing.length ? esc(L.how_to_fill) + "<br>" : ""}<a href="/playground?bot=${encodeURIComponent(L.id)}">Try turning its rules off in the playground</a>.<br>Data: ${esc(L.data)}. ${L.report_saved_at ? "Report saved " + esc(L.report_saved_at.slice(0, 10)) + ". " : ""}${esc(L.note)}</div>`;
+}).catch((e) => { $("label").innerHTML = `<p class="err">Could not load: ${esc(e.message)}</p>`; });
+document.addEventListener("click", (e) => {      // tap a row name to see what it means (works on phones too)
+  const b = e.target.closest("button.q"); if (!b) return;
+  const h = b.closest(".row").nextElementSibling; h.hidden = !h.hidden; b.setAttribute("aria-expanded", String(!h.hidden));
+  h.bsOpener = b;                                  // Esc or a tap elsewhere closes it again
+  h.bsClose = () => { h.hidden = true; b.setAttribute("aria-expanded", "false"); };
+});
+</script>
+</body>
+</html>
