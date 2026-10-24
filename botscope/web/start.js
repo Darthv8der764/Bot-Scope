@@ -78,7 +78,7 @@
         <li>${s.console_on ? "✓ The Claude panel is on." : `Open <button type="button" class="linkbtn" id="gsset">⚙ Settings</button> and press <b>Switch on</b> (it's off every time BotScope starts).`}</li>
         <li>${!cl.found ? "Claude Code (the <code>claude</code> command) isn't installed on this computer: get it at claude.com/claude-code." :
             cl.logged_in ? "✓ Your <code>claude</code> command is logged in." :
-            `Your <code>claude</code> command needs its own login (separate from the Claude app). Open the <b>Claude</b> panel → <b>Terminal</b>, type <code>claude</code>, press Enter and follow the login steps.`}</li>
+            `Your <code>claude</code> command needs its own login (separate from the Claude app). ${s.terminal ? "Open the <b>Claude</b> panel → <b>Terminal</b>" : "Open your computer's Terminal app"}, type <code>claude</code>, press Enter and follow the login steps.`}</li>
       </ol></div>
 
     <div class="step"><h3>5. Extra market data (optional) ${chip(Object.values(s.optional).every((o) => o.set), "all set", "optional")}</h3>

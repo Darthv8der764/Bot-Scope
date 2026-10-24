@@ -33,7 +33,7 @@ DEFAULT_OUT = Path("~/.botscope/publish-export").expanduser()
 MARKER = ".botscope-export"
 ALLOW = ("botscope/*.py", "botscope/web/*", "botscope/costs.json", "botscope/market_data/*.py", "bots/*.py",
          "skills/*", "skills/*/*", ".claude-plugin/*", "docs/*.md", "tests/*.py", "README.md", "CONTRIBUTING.md",
-         "pyproject.toml", ".env.example", ".gitignore", "LICENSE", "uv.lock")
+         "pyproject.toml", ".env.example", ".gitignore", "LICENSE", "uv.lock", "PRIVACY.md", "SECURITY.md")
 DENY = ("QUESTIONS.md", "ROADMAP.md", "EXPERIMENTS.md", "factory/*", "reports/*", "data/*", "botscope.local.json",
         "botscope.private.json", ".env", ".env.*", "LICENSE.draft")
 SHINGLE = 6                        # consecutive meaningful code lines that make one rule fingerprint
@@ -64,7 +64,7 @@ _PATTERNS = [
     ("email", re.compile(r"\b(?!(?:you|your|name|user|someone|noreply)@)[A-Za-z0-9._%+-]+@(?!example\.(?:com|org)\b)(?!anthropic\.com\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("home path", re.compile(r"(?:/Users/|/home/)(?!you\b|me\b|name\b|USER\b|\$)[A-Za-z0-9._-]+|C:\\Users\\[A-Za-z0-9._-]+")),
     ("tailscale name", re.compile(r"\b[a-z0-9-]+\.[a-z0-9-]+\.ts\.net\b|\btailnet\b", re.I)),
-    ("account number", re.compile(r"\bPA[0-9A-Z]{8,12}\b")),
+    ("account number", re.compile(r"\bPA(?=[0-9A-Z]*[0-9])[0-9A-Z]{8,12}\b")),   # needs a digit: not "PARTICULAR"
 ]
 
 

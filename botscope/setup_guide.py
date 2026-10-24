@@ -100,7 +100,7 @@ def status(fresh: bool = False) -> dict:
     steps = {"try": True, "keys": keys["state"] == "ok", "bots": bool(imported["bots"]),
              "claude": console.STATE["on"] and bool(claude_status().get("logged_in")),
              "extras": all(env.key(n) for n in OPTIONAL)}
-    return {"keys": keys, "claude": claude_status(), "console_on": console.STATE["on"],
+    return {"keys": keys, "claude": claude_status(), "console_on": console.STATE["on"], "terminal": console.terminal_allowed(),
             "bots": {"count": len(bots), "folder": str(loader.bots_dir()), "imported": len(imported["bots"])},
             "optional": {n: {"set": bool(env.key(n)), "unlocks": u, "where": w} for n, (u, w, _) in OPTIONAL.items()},
             "custom": custom_keys(), "steps": steps, "done": sum(steps.values()), "total": len(steps)}

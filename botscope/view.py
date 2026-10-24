@@ -508,6 +508,8 @@ class _Handler(BaseHTTPRequestHandler):
     def _terminal(self, q):
         """A WebSocket to a shell in a local pty. One shell per socket; it ends when the socket closes."""
         from . import console
+        if not console.terminal_allowed():
+            return self._send(403, {"error": "the terminal isn't part of the installed plugin"})
         if not console.STATE["on"]:
             return self._send(403, {"error": "the Claude panel is off: switch it on in Studio settings first"})
         key = self.headers.get("Sec-WebSocket-Key")
@@ -709,6 +711,12 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, js.encode(), "text/javascript; charset=utf-8")
             if u.path == "/i18n.js":
                 return self._send(200, PAGE.with_name("i18n.js").read_bytes(), "text/javascript; charset=utf-8")
+            if u.path.startswith("/vendor/"):         # chart + terminal libraries shipped with BotScope (no CDN)
+                f = PAGE.with_name("vendor") / u.path.rsplit("/", 1)[1]
+                types = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8"}
+                if f.suffix in types and f.is_file() and f.parent == PAGE.with_name("vendor"):
+                    return self._send(200, f.read_bytes(), types[f.suffix])
+                return self._send(404, {"error": "not found"})
             if u.path == "/start.js":
                 return self._send(200, PAGE.with_name("start.js").read_bytes(), "text/javascript; charset=utf-8")
             if u.path == "/optimizer.js":

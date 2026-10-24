@@ -23,4 +23,4 @@ build-backend = "setuptools.build_meta"
 include = ["botscope*"]
 
 [tool.setuptools.package-data]
-botscope = ["costs.json", "market_data/README.md", "web/*.html", "web/*.js"]
+botscope = ["costs.json", "market_data/README.md", "web/*.html", "web/*.js", "web/vendor/*"]

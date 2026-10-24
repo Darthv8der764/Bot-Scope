@@ -307,3 +307,15 @@ def test_child_processes_dont_inherit_a_parent_claude_session(monkeypatch):
 
 def test_websocket_accept_matches_the_rfc_example():
     assert console.ws_accept("dGhlIHNhbXBsZSBub25jZQ==") == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="     # RFC 6455, section 1.3
+
+
+def test_no_terminal_in_an_installed_plugin(monkeypatch):
+    """The installed plugin has the Claude panel but no shell terminal; a developer checkout keeps it."""
+    monkeypatch.setenv("BOTSCOPE_PLUGIN_MODE", "1")
+    _on()
+    assert console.status()["terminal"] is False and "shell" not in console.confirm_text()
+    assert _ws_handshake()[0] == 403
+    with pytest.raises(PermissionError):
+        console.Terminal(lambda b: None)
+    monkeypatch.setenv("BOTSCOPE_PLUGIN_MODE", "0")
+    assert console.status()["terminal"] is True

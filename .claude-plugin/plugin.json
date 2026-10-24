@@ -3,12 +3,24 @@
   "displayName": "BotScope",
   "version": "0.4.0",
   "description": "Look inside your own trading bots from your own Claude: honest backtests, a live 'what the bot sees' chart, a market desk, and safety rails. Paper trading by default. Not financial advice.",
-  "author": { "name": "Darthv8der764", "url": "https://github.com/Darthv8der764" },
+  "author": {
+    "name": "Darthv8der764",
+    "url": "https://github.com/Darthv8der764"
+  },
   "homepage": "https://github.com/Darthv8der764/Bot-Scope",
   "repository": "https://github.com/Darthv8der764/Bot-Scope",
   "license": "LicenseRef-PolyForm-Strict-1.0.0-BotScope",
-  "keywords": ["trading", "backtest", "paper-trading", "alpaca", "mcp"],
+  "keywords": [
+    "trading",
+    "backtest",
+    "paper-trading",
+    "alpaca",
+    "mcp"
+  ],
   "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://github.com/Darthv8der764/Bot-Scope#readme",
+  "supportUrl": "https://github.com/Darthv8der764/Bot-Scope/issues",
+  "privacyPolicyUrl": "https://github.com/Darthv8der764/Bot-Scope/blob/main/PRIVACY.md",
   "userConfig": {
     "ALPACA_API_KEY": {
       "type": "string",
@@ -43,7 +55,14 @@
   "mcpServers": {
     "botscope": {
       "command": "uv",
-      "args": ["run", "--locked", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "botscope-mcp"],
+      "args": [
+        "run",
+        "--locked",
+        "--quiet",
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "botscope-mcp"
+      ],
       "env": {
         "ALPACA_API_KEY": "${user_config.ALPACA_API_KEY}",
         "ALPACA_SECRET_KEY": "${user_config.ALPACA_SECRET_KEY}",
@@ -57,13 +76,39 @@
     "PreToolUse": [
       {
         "matcher": "mcp__alpaca__(place_.*_order|replace_order_by_id|exercise_options_position)",
-        "hooks": [{ "type": "command", "command": "uv",
-                    "args": ["run", "--locked", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "botscope-guard"] }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": [
+              "run",
+              "--locked",
+              "--quiet",
+              "--directory",
+              "${CLAUDE_PLUGIN_ROOT}",
+              "botscope-guard"
+            ]
+          }
+        ]
       },
       {
         "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "uv",
-                    "args": ["run", "--locked", "--quiet", "--directory", "${CLAUDE_PLUGIN_ROOT}", "python", "-m", "botscope.checkpoints"] }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv",
+            "args": [
+              "run",
+              "--locked",
+              "--quiet",
+              "--directory",
+              "${CLAUDE_PLUGIN_ROOT}",
+              "python",
+              "-m",
+              "botscope.checkpoints"
+            ]
+          }
+        ]
       }
     ]
   }

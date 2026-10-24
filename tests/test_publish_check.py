@@ -280,3 +280,10 @@ def test_update_and_make_repo_always_rescan_first(monkeypatch):
     monkeypatch.setattr(pc, "run", lambda out=None, **k: {"ok": False, "note": "x"})
     calls.clear()
     assert server.publish_check(how="update")["ok"] is False and calls == []          # a failed scan stops it
+
+
+def test_account_numbers_need_a_digit():
+    """'FITNESS FOR A PARTICULAR PURPOSE' in a license isn't an Alpaca account number; a real one (with digits) is."""
+    hits = lambda t: [h for h in pc.scan_text("x.md", t, {}) if h["kind"] == "account number"]   # noqa: E731
+    assert hits("WARRANTIES OF FITNESS FOR A PARTICULAR PURPOSE") == []
+    assert hits("account " + "PA" + "3XYZ12345")

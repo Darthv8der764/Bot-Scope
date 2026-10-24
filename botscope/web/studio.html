@@ -413,7 +413,8 @@ function consDraw() {
   $("sendchat").disabled = !cons.on;
 }
 async function consStatus() {
-  try { const s = await capi("/api/console/status", {}); cons.on = s.on; if (!s.claude_found) $("conserr").textContent = "Claude Code (the claude command) wasn't found on this computer."; }
+  try { const s = await capi("/api/console/status", {}); cons.on = s.on; cons.terminal = s.terminal !== false;
+    $("dt-term").hidden = !cons.terminal; if (!cons.terminal) $("db-term").hidden = true; if (!s.claude_found) $("conserr").textContent = "Claude Code (the claude command) wasn't found on this computer."; }
   catch (e) { cons.on = false; $("conserr").textContent = e.message; $("dockoff").textContent = e.message; }
   consDraw();
 }
@@ -457,6 +458,7 @@ $("dock").addEventListener("keydown", (e) => { if (e.key === "Escape" && window.
 function dockTab(k) {
   $("dt-chat").setAttribute("aria-selected", String(k === "chat")); $("dt-term").setAttribute("aria-selected", String(k === "term"));
   $("db-chat").hidden = !cons.on || k !== "chat"; $("db-term").hidden = !cons.on || k !== "term";
+  if (k === "term" && cons.terminal === false) return dockTab("chat");
   if (cons.on && k === "term") termOpen();
 }
 $("dt-chat").onclick = () => dockTab("chat");
@@ -518,14 +520,14 @@ document.addEventListener("click", (e) => {        // "Ask Claude" buttons on th
 });
 
 // terminal (xterm.js, loaded the first time it's opened; pinned versions with integrity hashes)
-const XT = [["link", "https://unpkg.com/@xterm/xterm@5.5.0/css/xterm.css", "sha384-8Xk9wy/gzEDUKrXtrmCFa2bBuK3BpjpDuL/p0SeKQX19Khl/M+lHOgD/CyYf7efP"],
-  ["script", "https://unpkg.com/@xterm/xterm@5.5.0/lib/xterm.js", "sha384-M169f14mRZOXm3hD/v2Ti0ThIT/RnAQagXA9nlE15yHAtrW19gdePJh/HaTzUOe/"],
-  ["script", "https://unpkg.com/@xterm/addon-fit@0.10.0/lib/addon-fit.js", "sha384-iF+jqbuti4XlB64clWgFWYEscb+UnSRv3VgVikGYZu+otNFnSHr7y7NcKfBnGizn"]];
+const XT = [["link", "/vendor/xterm-5.5.0.css", "sha384-8Xk9wy/gzEDUKrXtrmCFa2bBuK3BpjpDuL/p0SeKQX19Khl/M+lHOgD/CyYf7efP"],
+  ["script", "/vendor/xterm-5.5.0.js", "sha384-M169f14mRZOXm3hD/v2Ti0ThIT/RnAQagXA9nlE15yHAtrW19gdePJh/HaTzUOe/"],
+  ["script", "/vendor/xterm-addon-fit-0.10.0.js", "sha384-iF+jqbuti4XlB64clWgFWYEscb+UnSRv3VgVikGYZu+otNFnSHr7y7NcKfBnGizn"]];
 function loadXterm() {
   return cons.xterm ||= XT.reduce((p, [tag, url, sri]) => p.then(() => new Promise((ok, bad) => {
     const el = document.createElement(tag);
     if (tag === "link") { el.rel = "stylesheet"; el.href = url; } else el.src = url;
-    el.integrity = sri; el.crossOrigin = "anonymous"; el.onload = ok; el.onerror = () => bad(new Error("couldn't load the terminal (xterm.js) from unpkg.com"));
+    el.integrity = sri; el.crossOrigin = "anonymous"; el.onload = ok; el.onerror = () => bad(new Error("couldn't load the terminal (xterm.js)"));
     document.head.appendChild(el);
   })), Promise.resolve());
 }

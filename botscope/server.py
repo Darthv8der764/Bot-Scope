@@ -23,10 +23,14 @@ _register = mcp.tool
 
 
 def _demo_aware_tool(*a, **k):
-    """Every tool's result gets the DEMO DATA badge in demo mode (no keys): see demo.label."""
-    reg = _register(*a, **k)
+    """Every tool's result gets the DEMO DATA badge in demo mode (no keys): see demo.label. Every tool also gets its
+    title and read-only / destructive / open-world annotations from tool_labels."""
+    from . import tool_labels
 
     def deco(fn):
+        title, ann = tool_labels.annotations(fn.__name__)
+        reg = _register(*a, **{"title": title, "annotations": ann, **k})
+
         @functools.wraps(fn)
         def wrapped(*args, **kw):
             from . import demo

@@ -23,6 +23,16 @@ claude plugin install botscope@botscope
 ```
 </details>
 
+## Try these
+Three things to say to Claude once BotScope is installed (they work on demo prices with no account):
+
+1. **"Run the strategy factory on a calm daily ETF bot."** Five textbook candidates are tested on years they weren't
+   tuned on, after costs, with a luck check. You get the survivors, and the reason each of the others was dropped.
+2. **"Give me the honest report for pullback swing."** Every year since 2016, split into TUNED and UNTESTED years, with
+   costs, losing years and a luck meter.
+3. **"Open BotScope Studio and show me why the bot didn't trade there."** Click any candle on the chart to see the
+   bot's own reason for trading or waiting.
+
 BotScope is a toolkit you plug into Claude (an MCP server + a Claude Code plugin, about 90 tools). It shows what a
 bot sees candle by candle, tests it honestly (tuned years vs untested years, real costs, a luck meter), and keeps
 every order on paper unless you go through a strict graduation test. **Not financial advice.**
@@ -466,9 +476,25 @@ one it made, or if the public repo's history holds anything a clean export never
 once so the private list holds them). It adds no other remote and never pushes: it prints the one command that does,
 `cd ~/.botscope/publish-update && git push origin main`, and running it publishes the update for everyone to see.
 
+## Troubleshooting
+- **It says DEMO DATA everywhere.** No Alpaca keys yet. Open Studio's **Get started** tab (or say "set me up") and add
+  free Alpaca **paper** keys; they're checked before they're saved.
+- **"Alpaca didn't accept your keys."** The keys were copied wrong or regenerated. Make new paper keys at
+  alpaca.markets (or use the ones your own bot already uses) and paste them in Get started again.
+- **A Desk panel says "Needs live data".** That panel needs a free key (FRED, Finnhub) or the SEC contact line: add it in
+  Get started, step 5.
+- **The Claude panel answers "not logged in".** Your `claude` command needs its own login: run `claude` once in your
+  terminal and follow the steps.
+- **Studio won't open.** Say "run doctor" to Claude (or `botscope doctor`): it checks the keys, the page port and the
+  setup, and says what to fix.
+- **Something else.** Open an issue at https://github.com/Darthv8der764/Bot-Scope/issues.
+
 ## License
 Free to use for personal, noncommercial purposes, including researching, paper trading and informing trades in your
 own personal account: see [LICENSE](LICENSE) (PolyForm Strict 1.0.0 plus a short additional permission). You may change
 it for your own use (for example by asking Claude to add a data source), but you may not share, redistribute or sell
 copies, or use it in a business, without written permission from the owner. Suggestions and fixes are welcome as
 issues or pull requests.
+
+BotScope ships two third-party libraries under their own licenses: TradingView Lightweight Charts (Apache-2.0) and
+xterm.js (MIT). Their license files are in `botscope/web/vendor/`.

@@ -58,24 +58,34 @@ def allowed(client_ip: str, host: str | None, origin: str | None, token: str | N
     return None
 
 
+def terminal_allowed() -> bool:
+    """The shell terminal is for a developer checkout only. The installed plugin has the Claude panel and no
+    terminal: a plugin shouldn't hand a web page a shell."""
+    from .userdata import plugin_install
+    return not plugin_install()
+
+
 def status() -> dict:
     from . import settings
-    return {"on": STATE["on"], "claude_found": bool(shutil.which("claude")),
+    term = terminal_allowed()
+    return {"on": STATE["on"], "claude_found": bool(shutil.which("claude")), "terminal": term,
             "confirmed_before": bool(settings.load().get("console_confirmed_at")),
-            "note": "Your own Claude Code and a shell on this computer. Off at every launch. Paper only: the "
-                    "live-order guard is attached to every Claude run."}
+            "note": ("Your own Claude Code" + (" and a shell" if term else "") + " on this computer. Off at every "
+                     "launch. Paper only: the live-order guard is attached to every Claude run.")}
 
 
-CONFIRM_TEXT = ("Switch on the Claude panel and terminal? They run your own Claude Code and a shell on this computer, "
-                "with the same access you have in a terminal. Only this page can use them (this computer, this "
-                "port, a token made fresh at each launch), they switch off again at every launch, and the "
-                "live-order guard stays on.")
+def confirm_text() -> str:
+    what = "the Claude panel and terminal" if terminal_allowed() else "the Claude panel"
+    runs = "your own Claude Code and a shell" if terminal_allowed() else "your own Claude Code (its normal permission rules apply)"
+    return (f"Switch on {what}? It runs {runs} on this computer. Only this page can use it (this computer, this "
+            "port, a token made fresh at each launch), it switches off again at every launch, and the "
+            "live-order guard stays on.")
 
 
 def switch(on: bool, confirm: bool = False) -> dict:
     from . import settings
     if on and not settings.load().get("console_confirmed_at") and not confirm:
-        return {**status(), "question": CONFIRM_TEXT, "needs": "confirm=true"}
+        return {**status(), "question": confirm_text(), "needs": "confirm=true"}
     if on and not settings.load().get("console_confirmed_at"):
         settings.change(console_confirmed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
     STATE["on"] = bool(on)
@@ -286,6 +296,8 @@ class Terminal:
     def __init__(self, send, cols: int = 100, rows: int = 30):
         import pty
         need_on()
+        if not terminal_allowed():
+            raise PermissionError("the terminal isn't part of the installed plugin; use your own terminal app")
         self.send, self.closed = send, False
         self.fd, slave = pty.openpty()
         self.resize(cols, rows, slave)
