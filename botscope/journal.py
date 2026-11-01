@@ -15,7 +15,8 @@ _lock = threading.Lock()
 FILES = ("vetoes", "trade_overrides", "rule_ideas", "drawings", "backtests", "paper_results", "reports", "luck",
          "settings_log", "orders_log", "preflight", "checkpoints", "security_fixes",
          "live_since", "weather_fit", "whatif", "tries", "quiz", "scam_overrides", "event_fit", "brief_pushed", "backups",
-         "factory_runs", "robustness", "optimizer", "flights", "alert_rules", "questions", "loss_budget", "league", "checkup", "imported_trades", "phantom", "phantom_results", "auto_setup", "friends")
+         "factory_runs", "robustness", "optimizer", "flights", "alert_rules", "questions", "loss_budget", "league", "checkup", "imported_trades", "phantom", "phantom_results", "auto_setup", "friends",
+         "my_trades", "trade_notes")
 
 
 def folder() -> Path:
@@ -81,6 +82,16 @@ def upsert(name: str, key: dict, row: dict) -> dict:
                **key, **row}
         rows.append(new)
         _save(name, rows)
+    return new
+
+
+def replace_where(name: str, match: dict, rows: list[dict]) -> list[dict]:
+    """Drop every row whose fields match `match`, then add `rows`, in one write (a re-import of hundreds of rows)."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    new = [{"id": uuid.uuid4().hex[:8], "saved_at": now, **r} for r in rows]
+    with _lock:
+        keep = [r for r in load(name) if any(r.get(k) != v for k, v in match.items())]
+        _save(name, keep + new)
     return new
 
 

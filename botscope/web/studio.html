@@ -158,6 +158,7 @@ details.strat .strades { padding: 0 0 10px; }
 </aside></div>
 <footer class="muted purpose" style="padding:12px 16px;font-size:12px">BotScope gives you stock information for your own personal trading decisions. You can also use it with paper trading. It never places real orders for you and isn't financial advice.</footer>
 <script src="/friends.js"></script>
+<script src="/mytrades.js"></script>
 <script src="/start.js"></script>
 <script src="/optimizer.js"></script>
 <script src="/signals.js"></script>
@@ -179,6 +180,7 @@ const TABS = [
   ["compare", "Compare", null],
   ["optimizer", "Honest optimizer", null],
   ["imported", "My bots", null],
+  ["mytrades", "My trades", null],
   ["signals", "Signals", null],
   ["friends", "Friends", null],
   ["flight", "Flight sim", (b) => `/flight?bot=${enc(b)}`],
@@ -203,13 +205,14 @@ function show(key) {
     let el;
     if (url) { el = document.createElement("iframe"); el.src = url(bot()); el.title = label; }
     else { el = document.createElement("div"); el.className = key === "compare" ? "pane compare" : "pane";
-           el.innerHTML = key === "compare" ? compareShell() : key === "optimizer" ? "<div id='opt'></div>" : key === "imported" ? "<div id='imp'></div>" : key === "friends" ? friendsShell() : key === "start" ? startShell() : key === "signals" ? signalsShell() : factoryShell(); }
+           el.innerHTML = key === "compare" ? compareShell() : key === "optimizer" ? "<div id='opt'></div>" : key === "imported" ? "<div id='imp'></div>" : key === "friends" ? friendsShell() : key === "mytrades" ? mytradesShell() : key === "start" ? startShell() : key === "signals" ? signalsShell() : factoryShell(); }
     el.dataset.k = key; frames[key] = el; $("main").appendChild(el);
     if (key === "factory") loadRuns();
     if (key === "compare") loadCompare();
     if (key === "optimizer") loadOptimizer();
     if (key === "imported") loadImported();
     if (key === "friends") loadFriends();
+    if (key === "mytrades") loadMyTrades();
     if (key === "start") loadStart();
     if (key === "signals") loadSignals();
   }
@@ -226,6 +229,7 @@ const HELP = {
   start: "Set up real market data, your bots and Claude, step by step.",
   friends: "Swap friend codes and compare bots, read-only: numbers only, nothing copied or run.",
   signals: "Where your own strategies' entry rules fire on today's bars so far, refreshed every minute while the market is open. Paper only: nothing is ever placed.",
+  mytrades: "Trades you placed yourself, imported read-only: a pattern table (counts, dollars, R) and your notes on each trade. Nothing is ever placed.",
   imported: "Bots you already run, imported read-only: their past trades plus open and past orders. Nothing is ever placed.",
 };
 $("tabs").innerHTML = TABS.map(([k, label]) => `<button role="tab" data-k="${k}" aria-selected="false"${HELP[k] ? ` title="${esc(HELP[k])}"` : ""}>${label}</button>`).join("");

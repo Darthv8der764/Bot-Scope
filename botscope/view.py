@@ -689,6 +689,8 @@ class _Handler(BaseHTTPRequestHandler):
                     except Exception as e:      # demo mode / no keys: the summary still shows
                         out["orders_error"] = str(e)
                 return self._send(200, out)
+            if u.path == "/api/mytrades":              # My trades tab: imports, pattern table, trades with notes
+                return self._send(200, mytrades_get(q.get("source") or None, int(q.get("min") or 5)))
             if u.path == "/api/friends":
                 from . import friends
                 return self._send(200, friends.listing())
@@ -723,6 +725,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, PAGE.with_name("optimizer.js").read_bytes(), "text/javascript; charset=utf-8")
             if u.path == "/factory.js":
                 return self._send(200, PAGE.with_name("factory.js").read_bytes(), "text/javascript; charset=utf-8")
+            if u.path == "/mytrades.js":
+                return self._send(200, PAGE.with_name("mytrades.js").read_bytes(), "text/javascript; charset=utf-8")
             if u.path == "/friends.js":
                 return self._send(200, PAGE.with_name("friends.js").read_bytes(), "text/javascript; charset=utf-8")
             if u.path == "/signals.js":
@@ -849,8 +853,11 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": say(e)})
         if not self._host_ok() or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
             return self._send(403, {"error": "forbidden"})
+        cap = MYTRADES_MAX_BYTES if urlparse(self.path).path == "/api/mytrades/import" else 100_000   # a CSV's text
+        if int(self.headers.get("Content-Length", 0)) > cap:
+            return self._send(413, {"error": "too big for the page: ask Claude to import the file by its path instead"})
         try:
-            body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 100_000)) or b"{}")
+            body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), cap)) or b"{}")
             base = (body.get("bot", ""), body.get("symbol", ""), body.get("day", ""))
             path = urlparse(self.path).path
             if path == "/api/preflight":
@@ -859,6 +866,8 @@ class _Handler(BaseHTTPRequestHandler):
             if path == "/api/flight/score":
                 from . import flight
                 return self._send(200, flight.save_score(body))
+            if path.startswith("/api/mytrades/"):
+                return self._send(200, mytrades_post(path, body))
             if path in ("/api/friends/code", "/api/friends/check", "/api/friends/add", "/api/friends/remove"):
                 from . import friends      # read-only cards: numbers in, numbers out; nothing is run or traded
                 if path.endswith("/code"):
@@ -907,6 +916,39 @@ def _warm_imports() -> None:
         import alpaca.data.enums, alpaca.data.historical, alpaca.data.requests, alpaca.data.timeframe  # noqa: F401,E401
     except Exception:
         pass        # no SDK = the panels already say so on their own
+
+
+MYTRADES_MAX_BYTES = 5_000_000
+
+
+def mytrades_get(source: str | None = None, min_trades: int = 5) -> dict:
+    """GET /api/mytrades: what's imported, the pattern table, and the trades with their notes (newest first)."""
+    from . import trade_import, trade_notes, trade_patterns
+    ts = trade_notes.with_notes(trade_import.trades(source))
+    return {"sources": trade_import.sources(), "patterns": trade_patterns.patterns(source, min_trades),
+            "trades": list(reversed(ts))[:500], "total": len(ts), "choices": trade_notes.CHOICES}
+
+
+def mytrades_post(path: str, body: dict) -> dict:
+    """POST /api/mytrades/import (a file's text from the page's file picker, alpaca or demo), /note and /forget.
+    Everything stays on this computer; the only outside call is Alpaca's read-only order history."""
+    from . import trade_import, trade_notes
+    if path == "/api/mytrades/import":
+        broker = str(body.get("broker", ""))
+        if broker == "demo":
+            return trade_import.from_demo()
+        if broker == "alpaca":
+            return trade_import.from_alpaca(int(body.get("days") or 90))
+        return trade_import.from_text(broker, str(body.get("text", "")), str(body.get("name") or "file.csv"),
+                                      body.get("tz") or None)
+    if path == "/api/mytrades/note":
+        stop = body.get("stop")
+        return trade_notes.note(str(body.get("trade_id", "")), body.get("setup"),
+                                None if stop is None or stop == "" else float(stop), body.get("note"),
+                                body.get("checklist") if isinstance(body.get("checklist"), dict) else None)
+    if path == "/api/mytrades/forget":
+        return trade_import.forget(str(body.get("source", "")))
+    raise KeyError(path)
 
 
 def factory_run(goal: str, research: bool = False) -> dict:

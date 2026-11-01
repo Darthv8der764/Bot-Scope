@@ -1,7 +1,7 @@
 {
   "name": "botscope",
   "displayName": "BotScope",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Look inside your own trading bots from your own Claude: honest backtests, a live 'what the bot sees' chart, a market desk, and safety rails. Paper trading by default. Not financial advice.",
   "author": {
     "name": "Darthv8der764",

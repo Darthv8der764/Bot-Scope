@@ -1157,6 +1157,64 @@ def import_my_bots(how: str = "summary", name: str | None = None, path: str | No
 
 
 @mcp.tool()
+def import_my_trades(how: str = "summary", path: str | None = None, tz: str | None = None, days: int = 90,
+                     source: str | None = None) -> dict:
+    """Import my trades: the trades the user placed by hand (not a bot's), read-only, into their local journal.
+    how = "alpaca" (filled orders from the PAPER account, last `days` days, leaving out orders marked as a bot's), "webull" (a Webull orders CSV at `path`;
+    `tz` = the time zone the file's times are in, e.g. America/Chicago: ask the user, never guess it), "fills" (a CSV
+    with symbol, side, qty, price, time, tz), "demo" (made-up demo trades, labelled), "forget" (remove one `source`'s
+    trades) or "summary" (what's imported). Fills are paired first-in-first-out into round trips, times shown in US
+    Eastern. If the columns aren't found, show the file's columns from the error. Show round trips, rows not filled
+    and unreadable rows (with their lines). Nothing is traded. Not financial advice."""
+    from . import trade_import as ti
+    if how == "alpaca":
+        return _safe(ti.from_alpaca, days)
+    if how in ("webull", "fills"):
+        if not path:
+            return {"error": "give the CSV file's path"}
+        return _safe(ti.from_webull, path, tz) if how == "webull" else _safe(ti.from_fills_file, path, tz)
+    if how == "demo":
+        return _safe(ti.from_demo)
+    if how == "forget":
+        return _safe(ti.forget, source or "")
+    return {"sources": ti.sources(), "note": "Your own past trades, on this computer only."}
+
+
+@mcp.tool()
+def my_trades(source: str | None = None, limit: int = 50) -> dict:
+    """My trades: the user's imported round trips (newest first) with their notes: trade_id, symbol, side, opened,
+    closed (US Eastern), entry, exit, qty, $, setup tag, stop, R (only with a stop), note, checklist answers. Reads
+    only. Show a short table; the trade_id is what note_my_trade needs."""
+    from . import trade_import as ti, trade_notes
+    ts = trade_notes.with_notes(ti.trades(source))
+    limit = max(1, min(int(limit), 500))
+    return {"trades": list(reversed(ts))[:limit], "shown": min(limit, len(ts)), "total": len(ts),
+            "times": "US Eastern", "note": "Your own past trades. Not financial advice."}
+
+
+@mcp.tool()
+def note_my_trade(trade_id: str, setup: str | None = None, stop: float | None = None, note: str | None = None,
+                  checklist: dict | None = None) -> dict:
+    """Save a note on one of the user's imported trades: `setup` (their own tag, e.g. "pullback"), `stop` (the price
+    they'd planned to get out at if wrong; gives the trade's R), a free `note`, and `checklist` answers (setup, stop,
+    risk, target, last_trade win/loss/none today, trades_today, big_news yes/no/not sure, feeling calm/rushed/
+    frustrated/excited/bored). Fields left out stay; "" clears text, stop=0 clears the stop. Only stores the answers:
+    never judge them or say whether a trade should have been taken."""
+    from . import trade_notes
+    return _safe(trade_notes.note, trade_id, setup, stop, note, checklist)
+
+
+@mcp.tool()
+def my_trade_patterns(source: str | None = None, min_trades: int = 5) -> dict:
+    """My trades pattern table: the user's own imported trades grouped by setup tag, entry hour, weekday, holding
+    time, and the trade before it that day (after a win / after a loss / first of the day). Each row: trades, won
+    (a count, never a %), total and average $, R where a stop is known. Rows under min_trades say "not enough trades
+    yet": say so, don't compare them. Show the tables as they are, plain numbers; no advice, no verdicts."""
+    from . import trade_patterns
+    return _safe(trade_patterns.patterns, source, min_trades)
+
+
+@mcp.tool()
 def auto_setup(how: str = "scan", path: str | None = None, bot: str | None = None,
                translated: list[str] | None = None, not_translated: list[str] | None = None,
                added: list[str] | None = None) -> dict:

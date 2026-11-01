@@ -45,6 +45,8 @@ TITLES = {
     "get_chart_drawings": "Get my chart drawings", "log_paper_results": "Log paper results",
     "import_my_bots": "Import my bots (read-only)", "auto_setup": "Map an existing bot into BotScope",
     "publish_check": "Publish check (local)", "phantom_test": "Phantom test (live paper)",
+    "import_my_trades": "Import my trades (read-only)", "my_trades": "My trades", "note_my_trade": "Note on one of my trades",
+    "my_trade_patterns": "My trades pattern table",
 }
 
 READ_ONLY = {   # only reads: nothing written, nothing saved
@@ -54,12 +56,13 @@ READ_ONLY = {   # only reads: nothing written, nothing saved
     "top_movers", "market_news", "fed_odds", "yield_curve", "economy", "stock_panels", "portfolio_risk",
     "option_spread_plan", "data_sources", "list_alerts", "factory_history", "check_bot", "account_summary",
     "market_calendar", "why_not_here", "veto_scorecard", "get_chart_drawings", "open_desk", "open_studio",
-    "open_bot_view", "project_map", "parent_view", "strategy_dna",
+    "open_bot_view", "project_map", "parent_view", "strategy_dna", "my_trades", "my_trade_patterns",
 }
 
 DESTRUCTIVE = {   # can overwrite or remove something of yours, or switch real-money trading back on
     "restore_checkpoint", "remove_alert", "undo_security_fix", "security_check", "switch_live", "resume_trading",
-    "import_my_bots", "publish_check", "set_bots_on_off", "friends", "adopt_candidate",
+    "import_my_bots", "publish_check", "set_bots_on_off", "friends", "adopt_candidate", "import_my_trades",
+    "note_my_trade",
 }
 
 LOCAL_ONLY = {   # never reaches a service outside this computer
@@ -70,6 +73,7 @@ LOCAL_ONLY = {   # never reaches a service outside this computer
     "friends", "friends_league", "export_to_gallery", "export_paper_results", "backup_my_data", "veto_trade",
     "move_stop_target", "suggest_rules_from_vetoes", "data_sources", "scam_check", "screenshot_confidence",
     "publish_check", "auto_setup", "new_bot", "make_shadow", "adopt_candidate", "import_pine",
+    "my_trades", "note_my_trade", "my_trade_patterns",
 }
 
 
