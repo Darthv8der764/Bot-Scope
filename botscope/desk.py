@@ -9,6 +9,7 @@ import html
 import re
 
 from .env import alpaca_keys
+from .errtext import short
 
 # These are ETF prices, not index levels (SPY is about 1/10 of the S&P 500), so the label names the ETF first.
 INDEXES = {"SPY": "SPY (tracks S&P 500)", "QQQ": "QQQ (tracks Nasdaq 100)", "DIA": "DIA (tracks Dow 30)",
@@ -553,4 +554,4 @@ def panel(name: str, q: dict | None = None) -> dict:
     try:
         return demo.label(fns[name]())
     except Exception as e:
-        return {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+        return {"error": short(e, 200)}

@@ -57,3 +57,13 @@ def test_suggest_backtests_before_after_and_never_applies(monkeypatch):
     assert ideas and all("NOT applied" in r["status"] for r in ideas)
     assert loader.get("first_hour_breakout").params["r_multiple"] == 2.0        # the bot itself is untouched
     assert any("different bot" in x for x in out["left_out_too_broad"])       # e.g. "no trades before 10:16"
+
+
+def test_daily_bot_vetoes_get_no_clock_time_rules():
+    """A daily bot's trade ids end in 0000, which suggested "No new trades after -1:59" (QA pass 2026-11-12)."""
+    vs = [veto("SPY", f"2026-09-0{i}", "0000", "short") for i in range(1, 5)]
+    for daily in (True, False):
+        ps = veto_rules.patterns(vs, daily=daily)
+        assert not any("-1:" in p["plain"] or "24:" in p["plain"] for p in ps)
+        assert "Skip short trades." in [p["plain"] for p in ps]
+    assert not any("skip_after" in p["filters"] or "skip_before" in p["filters"] for p in veto_rules.patterns(vs, daily=True))

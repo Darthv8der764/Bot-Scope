@@ -84,7 +84,8 @@ def days_like_today(bot_cls, symbol: str | None = None, k: int = 10, today: date
         sess = data.sessions(raw, bot.timeframe, data.is_crypto(symbol))
         trades = []
         for day, bs in sess.items():
-            t, _ = backtest.run_day(bot_cls(), symbol, day, bs, cost, close_at_end=bot.timeframe == "1Day")
+            t, _ = backtest.run_day(bot_cls(), symbol, day, bs, cost, close_at_end=bot.timeframe == "1Day",
+                                    entries_from=d if bot.timeframe == "1Day" else None)
             trades += [x for x in t if x.t_in[:10] == p["day"]]
         all_trades += trades
         period = "tuned" if report._tuned(bot_cls, d, d) else "untested"

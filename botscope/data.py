@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from .bot import BarData
 from . import demo
+from .errtext import KeysRejected, keys_rejected
 from .env import ROOT, alpaca_keys, demo_mode
 from .userdata import place
 
@@ -54,7 +55,12 @@ def _fetch(symbol: str, start: date, end: date, timeframe: str, feed: str) -> li
     req = StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame(n, TimeFrameUnit[unit]),
                            start=datetime.combine(start, time(0), ET), end=datetime.combine(end, time(23, 59), ET),
                            feed=DataFeed(feed), adjustment=Adjustment.SPLIT)
-    rows = client.get_stock_bars(req).data.get(symbol, [])
+    try:
+        rows = client.get_stock_bars(req).data.get(symbol, [])
+    except Exception as e:
+        if keys_rejected(e):            # every symbol would fail the same way: stop and say so plainly
+            raise KeysRejected() from e
+        raise
     return [[b.timestamp.isoformat(), b.open, b.high, b.low, b.close, b.volume] for b in rows]
 
 

@@ -8,7 +8,7 @@
 <style>
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --chip: #efeee9;
-  --up: #1a9e6a; --down: #d64545; --accent: #3b6fd8; --mid: #c27c0e;
+  --up: #137d55; --down: #c23b3b; --accent: #3b6fd8; --mid: #9c6209;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --chip: #262624;
@@ -42,7 +42,7 @@ td.n, th.n { text-align: right; }
 .up { color: var(--up); } .down { color: var(--down); }
 .heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 4px; }
 .tile { border-radius: 6px; padding: 8px 6px; color: #fff; min-height: 58px; display: flex; flex-direction: column; justify-content: space-between; }
-.tile b { font-size: 12px; overflow-wrap: anywhere; line-height: 1.2; } .tile span { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile b { font-size: 12px; overflow-wrap: break-word; hyphens: manual; line-height: 1.2; } .tile span { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .idx { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 10px; }
 .idx div { min-width: 120px; } .idx b { font-size: 16px; font-variant-numeric: tabular-nums; }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -72,6 +72,7 @@ footer { padding: 8px 16px 16px; font-size: 12px; color: var(--muted); }
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const softWrap = (s) => esc(s).replace(/[A-Za-z]{11,}/g, (w) => w.slice(0, 7) + "&shy;" + w.slice(7));   // "Communi-cation", not "Communicatio-n"
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const pct = (x) => x == null ? "–" : `<span class="${x > 0 ? "up" : x < 0 ? "down" : ""}">${x > 0 ? "+" : ""}${Number(x).toFixed(2)}%</span>`;
 const num = (x, d = 2) => x == null ? "–" : Number(x).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -89,7 +90,7 @@ const PANELS = [
     <p class="muted">${esc(d.sources)}. ${esc(d.note)}</p>` },
   { id: "board", title: "Market board + sectors", wide: true, url: () => "/api/desk/board", render: (d) => `
     <div class="idx">${d.indexes.map((r) => `<div><div class="muted">${esc(r.name)}</div><b>${num(r.price)}</b> ${pct(r.change_pct)}</div>`).join("")}</div>
-    <div class="heat">${d.sectors.map((r) => `<div class="tile" style="background:${heatColor(r.change_pct)}" title="${esc(r.name)} (${r.symbol}): ${r.change_pct}% today, ${r.vs_spy > 0 ? "+" : ""}${r.vs_spy} vs SPY"><b>${esc(r.name)}</b><span>${r.change_pct > 0 ? "+" : ""}${r.change_pct.toFixed(2)}%</span></div>`).join("")}</div>
+    <div class="heat">${d.sectors.map((r) => `<div class="tile" style="background:${heatColor(r.change_pct)}" title="${esc(r.name)} (${r.symbol}): ${r.change_pct}% today, ${r.vs_spy > 0 ? "+" : ""}${r.vs_spy} vs SPY"><b>${softWrap(r.name)}</b><span>${r.change_pct > 0 ? "+" : ""}${r.change_pct.toFixed(2)}%</span></div>`).join("")}</div>
     <p class="muted">${d.sectors_up} of ${d.sectors_total} sectors up: ${esc(d.mood || "")}.</p>` },
   { id: "mybots", title: "My bots", url: () => "/api/desk/mybots", render: (d) => `
     ${table([["Bot", (r) => `<b>${esc(r.name)}</b> <span class="muted">v${esc(r.version)} · ${esc(r.timeframe)}${r.shadows ? " · shadow" : ""}</span>`],
@@ -237,8 +238,8 @@ async function loadPanel(p) {
   } catch (e) {
     el.querySelector(".body").innerHTML = /needs real data/.test(e.message)      // no live data (demo mode): a plain note, not an error
       ? `<p class="nolive" title="${esc(e.message)}">${marketOpen() ? "Needs live data" : "Market not open: needs live data"}</p>`
-      : /\b401\b|unauthorized/i.test(e.message)                                 // keys rejected: say so, not a raw web page
-      ? `<p class="nolive" title="${esc(e.message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())}">Needs live data: Alpaca didn't accept your keys (make new paper keys at alpaca.markets)</p>`
+      : /\b401\b|unauthorized|didn't accept your saved keys/i.test(e.message)   // keys rejected: say so, not a raw web page
+      ? `<p class="nolive" title="${esc(e.message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())}">Needs live data: Alpaca didn't accept your keys. <a href="/studio#start" target="_top">Make new paper keys in Get started</a></p>`
       : /\b[A-Z_]+ missing:/.test(e.message)                                    // an optional data key not added yet
       ? `<p class="nolive" title="${esc(e.message)}">Needs live data: ${esc(e.message.replace(/^\w+Error:\s*/, "").split(":")[0])} (free). <a href="/studio#start" target="_top">Add it in Get started</a></p>`
       : `<p class="err">Unavailable: ${esc(e.message)}</p>`;

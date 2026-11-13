@@ -16,6 +16,7 @@ from pathlib import Path
 
 from . import backtest, data, loader
 from .data import ET
+from .errtext import short
 
 NEAR_MINUTES = 30
 SMALL = 10
@@ -93,7 +94,7 @@ def mirror(path: str, bots: list[str] | None = None, bars_for=None, limit: int =
             except RuntimeError:
                 raise                                   # missing keys: say so once
             except Exception as e:
-                problems.append(f"{t['symbol']} {t['date']} {bid}: {type(e).__name__}: {str(e)[:100]}")
+                problems.append(f"{t['symbol']} {t['date']} {bid}: {short(e, 100)}")
         rows.append(row)
     agreed = [r for r in rows if any(b["verdict"] == "agreed" for b in r["bots"].values())]
     out_ = [r for r in rows if r["bots"] and all(b["verdict"] == "stayed out" for b in r["bots"].values())]

@@ -48,6 +48,7 @@ class {cls}(Bot):
 
     def indicators(self, bars):
         # Lines the chart draws: one value per bar, using only bars up to that one (no peeking).
+        # Ready-made, tested ones: from botscope import indicators as ind, e.g. {{"vwap": ind.anchored_vwap(bars)}}
         return {{}}
 
     def entry(self, view):

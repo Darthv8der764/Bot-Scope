@@ -40,3 +40,11 @@ def test_scores_are_saved_and_summed():
     out = flight.save_score({"bot": "b", "you_pct": -0.2, "bot_pct": 0.3, "hold_pct": -0.5, "trades": 1})
     assert out["summary"] == "last 2 flights: you beat the bot on 1 and just holding on 1"
     assert "secret" not in journal.load("flights")[0]
+
+
+def test_the_result_says_one_day_is_luck_once():
+    """The page shows the server's note (which already says one day is luck-heavy) without a second copy of it."""
+    from pathlib import Path
+    from botscope import flight
+    page = (Path(flight.__file__).with_name("web") / "flight.html").read_text()
+    assert "mostly luck" not in page and "${esc(D.note)}" in page

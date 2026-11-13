@@ -9,6 +9,10 @@ description: Write a new BotScope bot from a plain-English idea - the one-class 
 2. `new_bot` with a name, a 1-2 sentence description, timeframe and symbols: it writes a starter file in the bots
    folder from the template. Then fill in `indicators()`, `entry()` and `exit()` (see `botscope/bot.py`):
    - No peeking: only `view.bars` (finished bars). Every Entry has a stop. Every NoTrade has a plain reason.
+   - Need VWAP, ATR, RSI, ADX, relative volume, opening range, pivots and the like? Use the tested shared ones,
+     `from botscope import indicators as ind` (list: `botscope/indicators.py` CATALOG, also shown in the Rule
+     playground), instead of writing your own. Each returns one value per bar (None until there is enough history);
+     intraday ones that need earlier days take `view.history + view.bars` and need `history_days`.
    - Put every tunable number in `params`. Write `rules` in plain English, one per line, matching the code.
    - Optional near misses: `NoTrade("range too narrow", almost=Entry(...))` shows ghost trades.
    - `status = "untested"`, `tuned_on = None` until settings are picked on a date range.

@@ -53,3 +53,20 @@ def test_page_has_teach_button_and_route():
     assert 'id="teachbtn"' in html and "/api/teach?" in html
     out = json.loads(urlopen(view.ensure_server() + "/api/teach?bot=first_hour_breakout&symbol=TEST&day=2026-09-01").read())
     assert out["lesson"][0]["title"] == "My rules"
+
+
+def test_daily_bot_lessons_name_days_not_00_00():
+    """A daily bot's lesson read "00:00-00:00: not enough days of history yet" (QA pass 2026-11-12)."""
+    from datetime import datetime, timezone
+    day = lambda d: int(datetime(2026, 6, d, tzinfo=timezone.utc).timestamp())     # noqa: E731
+    st = {"bot": {"name": "Daily", "rules": ["r"], "timeframe": "1Day"}, "symbol": "SPY", "day": "2026-06-30",
+          "source": "test", "account": "PAPER", "ghosts": [], "vetoed": [],
+          "reasons": {str(day(1)): {"kind": "no_trade", "reason": "not enough days of history yet"},
+                      str(day(2)): {"kind": "no_trade", "reason": "not enough days of history yet"},
+                      str(day(3)): {"kind": "no_trade", "reason": "no signal"}},
+          "trades": [{"side": "long", "t_in": day(5), "t_out": day(9), "entry": 100.0, "stop": 98.0, "target": 104.0,
+                      "exit": 104.0, "why_in": "x", "why_out": "target hit", "r": 1.9}]}
+    out = teach.lesson(st)
+    text = " ".join(s for p in out["lesson"] for s in p["steps"])
+    assert "00:00" not in text and "Jun 1-Jun 2: not enough days" in text and "Jun 3: no signal" in text
+    assert "Jun 5: I bought" in text and "Jun 9: I got out" in text

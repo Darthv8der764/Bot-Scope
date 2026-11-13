@@ -29,6 +29,8 @@ def test_the_three_planted_patterns_are_there():
     held = lambda x: (datetime.fromisoformat(x["closed"]) - datetime.fromisoformat(x["opened"])).seconds / 60  # noqa: E731
     losers = [held(x) for x in p if not x["win"] and not x["closed"].endswith("15:55:00")]   # not cut at the close
     assert min(losers) > max(held(x) for x in p if x["win"])                                  # losers held longer
+    tilt = [x for x in p if x["kind"] == "tilt"]
+    assert len(tilt) >= 8 and sum(x["win"] for x in tilt) * 4 < len(tilt)            # after 2 losses: mostly lose
     ns = demo_trades.notes()
     assert len(ns) == len(p) and all(n["checklist"]["setup"] == n["setup"] for n in ns)
 

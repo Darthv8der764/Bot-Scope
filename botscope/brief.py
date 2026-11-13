@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import date
 
 from . import loader, preflight
+from .errtext import short
 
 
 def weather_line(w: dict) -> str:
@@ -78,7 +79,7 @@ def brief(day: date | None = None, weather=None, events=None, push: bool = False
             from . import weather as wx
             weather = wx.today()
         except Exception as e:
-            weather = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+            weather = {"error": short(e)}
     pf = preflight.today_list(day, events=events)
     bots, _ = loader.load_all()
     syms = {bid: list(getattr(cls(), "symbols", []) or []) for bid, cls in bots.items()}

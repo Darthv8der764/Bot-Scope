@@ -11,6 +11,9 @@ follows it can be charted, backtested and checked without special code.
                                                                                  called once per finished bar, when flat
         def exit(self, view, pos):   ->  Exit("why") or  None (keep holding)    called once per finished bar, when in
 
+Ready-made indicators (VWAP, ATR, RSI, ADX, relative volume, opening range, ...) that already follow rule 1 below
+live in botscope/indicators.py:  from botscope import indicators as ind.
+
 Rules every bot follows (the backtester and safety checker rely on them):
   1. No peeking: `view.bars` only holds bars that have already finished. A bot never sees the future.
   2. Every entry has a stop. Target is optional (None = hold until exit() or the close).

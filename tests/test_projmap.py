@@ -37,3 +37,10 @@ def test_family_tree_is_a_live_draggable_graph():
     assert "pointerdown" in html and "requestAnimationFrame" in html and "n.pinned = true" in html   # drag, live, stays put
     assert ".node:focus { outline: none; }" in html                      # no browser focus ring on click
     assert "pick(null)" in html and 'e.key === "Escape"' in html          # click empty space / Esc closes the info
+
+
+def test_bot_family_dots_are_round():
+    """The shared button padding stretched each 18 px version dot into an oval (QA pass 2026-11-12)."""
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "botscope" / "web" / "map.html").read_text()
+    assert ".dot { width: 18px; height: 18px; padding: 0;" in page

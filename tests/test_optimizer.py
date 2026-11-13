@@ -109,3 +109,15 @@ def test_each_symbol_and_window_is_fetched_once_per_run():
     assert len(calls) == 4
     get("SPY", 1, 2).append("changed")    # one cell can't change the bars the next cell sees
     assert get("SPY", 1, 2) == ["SPY"]
+
+
+def test_a_grid_with_no_winner_is_not_called_an_island(bot, monkeypatch):
+    """Every cell lost money, yet the summary said "0 of 2 neighbors make money (an island)" (QA pass 2026-11-12)."""
+    from datetime import date
+    monkeypatch.setattr(sf, "held_out", lambda *a, **k: {"trades": 0, "avg_r": None})
+    va, vb = [6, 8, 10], [1.0, 1.5, 2.0]
+    grid = [[{"rsi_below": x, "stop_ranges": y, "trades": 40, "avg_r": -0.2 - x / 100 - y / 10, "total_r": -8}
+             for y in vb] for x in va]
+    out = optimizer._judge(bot, "rsi_below", "stop_ranges", va, vb, ["SPY"], date(2025, 11, 12), demo.bars, grid, False)
+    assert out["verdict"].startswith("no cell makes money")
+    assert "island" not in out["neighbors"]["summary"] and "neither does the best cell" in out["neighbors"]["summary"]

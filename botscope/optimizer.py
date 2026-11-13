@@ -150,8 +150,9 @@ def _judge(cls, a, b, va, vb, syms, cut, fetch, grid, save) -> dict:
                          f"cell. Picking the best of {len(cells)} on the same years flatters it, so expect part of that "
                          "gap to be luck"),
         "neighbors": {"cells": nb, "plateau": plateau,
-                      "summary": f"{len(nb_ok)} of {len(nb)} neighbors make money" + (" (a plateau)" if plateau else
-                                                                                    " (an island)")},
+                      "summary": f"{len(nb_ok)} of {len(nb)} neighbors make money" + (
+                          " (and neither does the best cell)" if best["avg_r"] <= 0     # no edge: not an "island"
+                          else " (a plateau)" if plateau else " (an island)")},
         "held_out": {"best": ho_best, "today": ho_now},
         "verdict": verdict, "note": NOTE}
     return _save(cls, out, save)

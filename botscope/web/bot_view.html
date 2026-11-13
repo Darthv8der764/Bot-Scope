@@ -10,17 +10,17 @@
 <style>
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd;
-  --up: #1a9e6a; --down: #d64545; --stop: #d64545; --target: #1a9e6a; --ind1: #3b6fd8; --ind2: #c27c0e;
+  --up: #137d55; --down: #c23b3b; --stop: #c23b3b; --target: #137d55; --ind1: #3b6fd8; --ind2: #c27c0e; --warn-ink: #8c5a07;
   --draw: #8a3ffc; --veto: #8d8d88; --accent: #3b6fd8; --chip: #efeee9;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a;
-  --up: #2fbf86; --down: #ef6363; --stop: #ef6363; --target: #2fbf86; --ind1: #6d97ee; --ind2: #e0a23a;
+  --up: #2fbf86; --down: #ef6363; --stop: #ef6363; --target: #2fbf86; --ind1: #6d97ee; --ind2: #e0a23a; --warn-ink: #e0a23a;
   --draw: #b388ff; --veto: #77776f; --accent: #6d97ee; --chip: #262624;
 } }
 :root[data-theme="dark"] {
   --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a;
-  --up: #2fbf86; --down: #ef6363; --stop: #ef6363; --target: #2fbf86; --ind1: #6d97ee; --ind2: #e0a23a;
+  --up: #2fbf86; --down: #ef6363; --stop: #ef6363; --target: #2fbf86; --ind1: #6d97ee; --ind2: #e0a23a; --warn-ink: #e0a23a;
   --draw: #b388ff; --veto: #77776f; --accent: #6d97ee; --chip: #262624;
 }
 * { box-sizing: border-box; }
@@ -32,7 +32,7 @@ header h1 { font-size: 16px; margin: 0; }
 .pill.paper { background: color-mix(in srgb, var(--up) 18%, transparent); color: color-mix(in srgb, var(--up) 55%, var(--ink)); font-weight: 600; }
 .pill.live-money { background: var(--down); color: var(--on-down); font-weight: 700; }
 .pill.failed { background: color-mix(in srgb, var(--down) 15%, transparent); color: var(--down); }
-.pill.warn { background: color-mix(in srgb, var(--ind2) 20%, transparent); color: var(--ind2); font-weight: 600; white-space: normal; }
+.pill.warn { background: color-mix(in srgb, var(--ind2) 20%, transparent); color: var(--warn-ink); font-weight: 600; white-space: normal; }
 .pill.livefeed::before { content: "● "; color: var(--down); }
 #conf { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; font-size: 12px; color: var(--muted); }
 #conf .bars { display: inline-flex; gap: 2px; }
@@ -49,8 +49,13 @@ button.stop.stopped { background: var(--panel); color: var(--down); }
 main { display: grid; grid-template-columns: 1fr 300px; gap: 0; min-height: calc(100vh - 100px); }
 #chartwrap { position: relative; min-height: 460px; border-right: 1px solid var(--line); }
 #chart { position: absolute; inset: 0; }
+@media (min-width: 761px) {   /* the chart fits the window and stays in view while the long side panel scrolls */
+  #chartwrap { position: sticky; top: 0; align-self: start; height: calc(100vh - 100px); }
+}
 #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
 #overlay.drawing { pointer-events: auto; cursor: crosshair; }
+#chartmsg { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--ink); background: var(--panel); }
+#chartmsg[hidden] { display: none; }
 #legend { position: absolute; top: 8px; left: 12px; z-index: 4; font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; pointer-events: none; }
 #legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
 @media (max-width: 760px) {   /* phone: chart on top, panels below, header wraps */
@@ -78,8 +83,9 @@ footer a { color: var(--muted); }
 @media (max-width: 760px) {
   main { grid-template-columns: 1fr; }
   #chartwrap { min-height: 380px; border-right: 0; border-bottom: 1px solid var(--line); }
-  header form { margin-left: 0; width: 100%; }
+  header form { margin-left: 0; width: 100%; flex-wrap: wrap; }
   header form input { flex: 1; min-width: 0; }
+  header form input[type="date"] { min-width: 9.5em; }   /* the whole date stays readable; the row wraps instead */
   header form #f-symbol { flex: 0 0 auto; width: 10ch; min-width: 10ch; }
 }
 </style>
@@ -113,6 +119,7 @@ footer a { color: var(--muted); }
     <div id="chart"></div>
     <canvas id="overlay"></canvas>
     <div id="legend"></div>
+    <div id="chartmsg" role="status" hidden></div>
   </div>
   <aside>
     <section id="p-replay" data-closable data-title="Replay the day">
@@ -192,7 +199,9 @@ let quiz = null, quizAt = null;
 let mode = "pointer", drag = null, justDragged = false, draft = null, whyTime = null, replay = null, playTimer = null;
 
 function toast(msg, ms = 3500) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
-const hhmm = (sec) => new Date(sec * 1000).toISOString().slice(S && S.bot.timeframe === "1Day" ? 5 : 11, S && S.bot.timeframe === "1Day" ? 10 : 16);   // chart time is already New York time; daily bots show MM-DD
+const hhmm = (sec) => S && S.bot.timeframe === "1Day"     // chart time is already New York time; daily bots show the day ("Sep 30", not "09-30", which reads like 9:30)
+  ? new Date(sec * 1000).toLocaleDateString(document.documentElement.lang || "en", { timeZone: "UTC", month: "short", day: "numeric" })
+  : new Date(sec * 1000).toISOString().slice(11, 16);
 const fmt = (x) => x == null ? "none" : Number(x).toFixed(2);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -225,8 +234,14 @@ function makeChart() {
 async function load(keepView) {
   const range = keepView && chart ? chart.timeScale().getVisibleLogicalRange() : null;
   try { S = await api(`/api/view?bot=${encodeURIComponent(ctx.bot)}&symbol=${encodeURIComponent(ctx.symbol)}&day=${encodeURIComponent(ctx.day)}${ctx.span !== "1d" ? "&span=" + encodeURIComponent(ctx.span) : ""}`); }
-  catch (e) { $("why").innerHTML = `<b>Could not load:</b> ${esc(e.message)}`; return; }
+  catch (e) {
+    $("why").innerHTML = `<b>Could not load:</b> ${esc(e.message)}`;
+    $("chartmsg").textContent = "Could not load the chart: " + e.message; $("chartmsg").hidden = false;
+    return;
+  }
+  $("chartmsg").textContent = S.empty_reason || ""; $("chartmsg").hidden = !S.empty_reason;   // a weekend or holiday: say why, not a blank chart
   ctx.symbol = S.symbol; ctx.day = S.day;
+  chart.applyOptions({ timeScale: { timeVisible: S.bot.timeframe !== "1Day" } });   // daily candles have no clock time (no "00:00")
   history.replaceState(null, "", `?bot=${encodeURIComponent(ctx.bot)}&symbol=${S.symbol}&day=${S.day}${S.span ? "&span=" + S.span : ""}`);
   $("title").textContent = `${S.bot.name} · ${S.symbol} · ${S.day}`;
   $("status").textContent = S.bot.status; $("status").className = "pill " + (S.bot.status === "failed" ? "failed" : "");
@@ -396,6 +411,10 @@ function onClick(p) {
   showWhy(p.time);
   const hit = [...S.trades.map((t) => [t.id, t.t_in, t.t_out]), ...S.vetoed.map((v) => [v.id, v.t, v.t])].find(([, a, b]) => p.time >= a && p.time <= b);
   if (hit && hit[0] !== selected) select(hit[0]);
+  revealWhy();
+}
+function revealWhy() {   // the answer card, even when the side panel runs past the window
+  if (!$("p-why").hidden) $("p-why").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 // ---- confidence meter: five levels, never a percentage ----
@@ -690,7 +709,7 @@ function quizAnswer(guess, i) {
 $("r-quiz").onclick = () => {
   const pts = quizPoints();
   if (!pts.length) return toast("No candles to quiz on for this day.");
-  quiz = { left: pts, n: pts.length, hits: 0 }; quizAsk();
+  quiz = { left: pts, n: pts.length, hits: 0 }; quizAsk(); revealWhy();   // the questions show in the "Why not here?" card
 };
 $("r-speed").onchange = () => { if (playTimer) { stopPlay(); $("r-play").click(); } };
 $("r-slider").oninput = () => { stopPlay(); setReplay(+$("r-slider").value); };
@@ -700,7 +719,7 @@ $("r-all").onclick = () => { stopPlay(); setReplay(null); };
 async function loadVetoCard() {
   let v;
   try { v = await api(`/api/veto_scorecard?bot=${encodeURIComponent(ctx.bot)}`); } catch (e) { return; }
-  if (!v.vetoes) return;
+  if (!v.vetoes) { $("vetocard").innerHTML = `<span class="muted">No vetoes yet. Use "This looks bad" on a trade.</span>`; return; }   // the last one undone: no stale numbers
   const net = v.net_r_saved, col = net > 0 ? "var(--up)" : net < 0 ? "var(--down)" : "var(--muted)";
   $("vetocard").innerHTML = `<div class="row" style="gap:14px;align-items:baseline">
       <b style="font-size:22px;color:${col}">${Math.abs(net).toFixed(2)}R</b><span class="muted">${net >= 0 ? "saved by your vetoes" : "missed because of your vetoes"}</span></div>

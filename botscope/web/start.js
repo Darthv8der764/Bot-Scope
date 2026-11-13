@@ -43,7 +43,10 @@
 
     <div class="step"><h3>1. Try it ${chip(true, "done", "")}</h3>
       <p>You're in BotScope Studio. Every tab works now. Without keys, stock prices are made up (the <b>DEMO DATA</b> badge) and crypto uses real past prices.
-      Try the <a href="#tutorial">Tutorial</a> or click any candle in the <a href="#bot">Bot view</a>.</p></div>
+      Try the <a href="#tutorial">Tutorial</a> or click any candle in the <a href="#bot">Bot view</a>.</p>
+      <div class="row"><button type="button" id="gsdemo">See My trades on made-up demo trades</button>
+        <span class="msg" id="gsdemomsg" role="status"></span></div>
+      <p class="muted">A made-up trader's 8 weeks of trades with notes, so you can see the pattern table before importing your own. Not real.</p></div>
 
     <div class="step" id="gs-keys"><h3>2. Real market data (free) ${chip(keysOk, "working", "to do", k.state === "rejected" || k.state === "live_key")}</h3>
       <p>${keyNote}</p>
@@ -119,6 +122,12 @@
       $("gsimp").disabled = false;
     };
     if ($("gsset")) $("gsset").onclick = () => $("setbtn").click();
+    if ($("gsdemo")) $("gsdemo").onclick = async () => {
+      const m = $("gsdemomsg"); $("gsdemo").disabled = true; m.className = "msg"; m.textContent = " Importing the demo trades…";
+      try { await tryMyTradesDemo(); m.textContent = ""; }
+      catch (e) { m.className = "msg bad"; m.textContent = " " + e.message; }
+      $("gsdemo").disabled = false;
+    };
     $("gscustom").onsubmit = async (e) => {
       e.preventDefault();
       const m = $("gscmsg");

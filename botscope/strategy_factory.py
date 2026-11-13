@@ -24,6 +24,7 @@ from pathlib import Path
 from . import backtest, checkpoints, confidence, journal, loader, luck, report, scaffold
 from .bot import Bot
 from .env import ROOT
+from .errtext import KeysRejected, short
 
 PROGRESS: dict = {}     # the run in progress, for Studio's progress line: {goal, done, total, now}
 MAX_CANDIDATES = 5
@@ -771,8 +772,10 @@ def run(goal: str, symbols: list[str] | None = None, max_candidates: int = MAX_C
             try:
                 cls = load_file(c["path"])
                 res = judge(cls, spec, fetch)
+            except KeysRejected:                         # no market data at all: not the candidate's fault
+                raise
             except Exception as e:                       # a broken candidate is a dropped candidate, never a crash
-                res = {"kept": False, "step": "loading", "reason": f"crashed: {type(e).__name__}: {str(e)[:120]}"}
+                res = {"kept": False, "step": "loading", "reason": f"crashed: {short(e)}"}
         res |= {"name": cls.name if cls else c["label"], "template": c.get("template"),
                 "file": str(c["path"]) if c.get("path") else None, "id": c["slug"],
                 "rules": list(cls.rules) if cls else [], "learn": learn_more(res.get("reason", "")),

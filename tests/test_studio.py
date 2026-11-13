@@ -84,3 +84,20 @@ def test_your_own_bots_are_marked_mine_and_listed():
     assert loader.is_mine(mine) == bool(loader.private_dir())
     html = (WEB / "studio.html").read_text()
     assert 'optgroup label="My bots"' in html and "botscope-studio-bot" in html
+
+
+def test_my_bots_average_falls_back_to_dollars_without_r():
+    """A trade log without stops (no R) showed "avg –" although the dollar average was known (QA pass 2026-11-12)."""
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "botscope" / "web" / "studio.html").read_text()
+    assert 'b.avg_r != null ? fmtR(b.avg_r) : usd(b.total_usd / (b.trades || 1)) + " a trade"' in page
+
+
+def test_my_bots_and_signals_prices_always_show_cents():
+    """My bots showed "$395.1" and "-$23.5"; the My trades tab had been fixed alone (QA pass 2026-11-12)."""
+    from pathlib import Path
+    web = Path(__file__).resolve().parent.parent / "botscope" / "web"
+    for page, names in (("studio.html", ("const usd = ", "const px = ")), ("signals.js", ("const px = ",))):
+        lines = (web / page).read_text().splitlines()
+        for n in names:
+            assert "minimumFractionDigits: 2" in next(x for x in lines if n in x), (page, n)

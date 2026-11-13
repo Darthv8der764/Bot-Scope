@@ -75,4 +75,29 @@ def test_dollars_always_show_cents():
 def test_hidden_rows_stay_hidden():
     js = (WEB / "mytrades.js").read_text()
     assert ".mt [hidden] { display: none !important; }" in js       # else .row's display: flex shows them anyway
-    assert '$("mtFileRow").hidden = !file; $("mtTzRow").hidden = !file;' in js
+    assert '$("mtFileRow").hidden = !file; $("mtTzRow").hidden = !(b === "webull" || b === "fills");' in js   # date-only files: no zone
+
+
+def test_demo_is_one_click_from_get_started_and_the_empty_tab():
+    js, start = (WEB / "mytrades.js").read_text(), (WEB / "start.js").read_text()
+    assert "data-demo" in js and "window.tryMyTradesDemo" in js and 'broker: "demo"' in js
+    assert 'id="gsdemo"' in start and "tryMyTradesDemo()" in start and "made-up" in start
+
+
+def test_export_has_every_trade_with_notes_and_defuses_formulas():
+    from urllib.request import urlopen
+    from botscope import trade_import, trade_notes
+    trade_import.from_demo()
+    t = trade_import.trades()[0]
+    trade_notes.note(t["trade_id"], setup="=HYPERLINK(1)", note="+made-up")
+    text = urlopen(view.ensure_server() + "/api/mytrades/export.csv").read().decode()
+    rows = text.strip().splitlines()
+    assert rows[0].startswith("trade_id,source,symbol") and len(rows) == len(trade_import.trades()) + 1
+    assert "'=hyperlink(1)" in text and "'+made-up" in text and "checklist_feeling" in rows[0]
+    assert "Download my trades and notes (CSV)" in (WEB / "mytrades.js").read_text()
+
+
+def test_calendar_draws_from_the_trades_and_says_what_colors_mean():
+    js = (WEB / "mytrades.js").read_text()
+    assert "function drawCalendar" in js and "drawCalendar();" in js and 'id="mtCal"' in js
+    assert "+ made money, − lost" in js and "aria-label" in js                   # not color alone

@@ -419,7 +419,7 @@ A daily bot that looks far back (say a 200-day average) sets `lookback_days = 20
 earlier days; see [`bots/pullback_swing.py`](bots/pullback_swing.py).
 
 ## Example bots
-Five bots in `bots/` show the format. None of them is a bot to trust with money; run `nutrition_label <bot>` for
+Seven bots in `bots/` show the format. None of them is a bot to trust with money; run `nutrition_label <bot>` for
 each one's current numbers (tuned vs untested days, after costs).
 
 | Bot | Candles | Sides | Status | In one line |
@@ -429,6 +429,8 @@ each one's current numbers (tuned vs untested days, after costs).
 | [`inside_bar_breakout`](bots/inside_bar_breakout.py) | 15 min | long | untested | Textbook inside-bar pattern: buys a close above the candle before a quiet one, in an up day (demo-data report only so far) |
 | [`crypto_trend`](bots/crypto_trend.py) | daily | long | untested | BTC and ETH, 24/7 days; crosses above the 50-day average; report: +26.6R over 115 untested trades since 2021, beat holding SPY but not holding BTC, and only +7.8R without its 3 best trades |
 | [`pullback_swing`](bots/pullback_swing.py) | daily | long | untested | Textbook RSI(2) dip buy in an uptrend; report: +44R over 435 untested trades after costs, beat holding SPY in 8 of 11 years, but only +21R over 265 trades on index ETFs (hand-picked stocks flatter it; details in its file) |
+| [`double_7s`](bots/double_7s.py) | daily | long | untested | Textbook "Double 7s" dip buy on index ETFs only: buys a 7-day low close above the 200-day average, sells at a 7-day high; +23.7R over 271 untested trades (2021-2026) after costs, 10 of 10 robustness checks, but it trailed just holding SPY and was weak on 2016-2020 (+8.5R, lost 3 of 5 years) |
+| [`crypto_weekly_momentum`](bots/crypto_weekly_momentum.py) | daily | long | untested | BTC and ETH, decides once a week: holds while up over the last 28 days; on Coinbase candles +38.7R over 71 untested trades (2021-2026) after crypto costs, 10 of 10 robustness checks, beat holding BTC in 4 of 6 years, but flat in the held-out last year (-0.8R) |
 
 `robustness_check` on each (2026-10-17, Alpaca SIP data, decisions on untested years up to 2025-10-17, then the
 held-out year): pullback swing passed 9 of 9 (held-out year: 53 trades, +0.13R each; its stock list still flatters

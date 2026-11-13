@@ -35,7 +35,7 @@
     <span class="muted status" id="sgStatus" role="status" aria-live="polite">Loading…</span></div>
   <div id="sgBody"></div></div>`;
 
-  const px = (x) => x == null ? "–" : "$" + (+x).toLocaleString(undefined, { maximumFractionDigits: x < 10 ? 4 : 2 });
+  const px = (x) => x == null ? "–" : "$" + (+x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: x < 10 ? 4 : 2 });
   const R = (x) => x == null ? "–" : `${x > 0 ? "+" : ""}${(+x).toFixed(2)}R`;
   const view = (r) => `<a href="${esc(r.link)}" data-sgview="${esc(r.link)}">Chart</a>`;
   const track = (t) => `<span class="lvl" title="${esc(t.why.join("; "))}">confidence ${esc(t.confidence)}</span>

@@ -7,7 +7,7 @@
 <title>Zoom Stack</title>
 <script src="/vendor/lightweight-charts-4.2.3.standalone.js"></script>
 <style>
-:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --mark: #e0a800; --grid: #ececea; }
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #137d55; --down: #c23b3b; --mark: #e0a800; --grid: #ececea; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --mark: #f5c542; --grid: #262624; } }
 :root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --mark: #f5c542; --grid: #262624; }
 * { box-sizing: border-box; }
@@ -54,7 +54,8 @@ const q = new URLSearchParams(location.search);
     Object.assign(line.style, { position: "absolute", top: 0, bottom: "28px", width: "2px", background: css("--mark"), pointerEvents: "none", zIndex: 3 });
     el.appendChild(line);
     const place = () => { const x = ch.timeScale().timeToCoordinate(near.time); line.style.display = x == null ? "none" : "block"; line.style.left = (x ?? 0) - 1 + "px"; };
-    ch.timeScale().fitContent(); ch.timeScale().subscribeVisibleLogicalRangeChange(place); setTimeout(place, 50);
+    // all candles plus a little room each side, so a "here" at the first or last candle isn't cut off at the edge
+    ch.timeScale().setVisibleLogicalRange({ from: -4, to: L.candles.length + 3 }); ch.timeScale().subscribeVisibleLogicalRangeChange(place); setTimeout(place, 50);
   }
 })();
 </script>

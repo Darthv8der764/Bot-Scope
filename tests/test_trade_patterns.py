@@ -78,3 +78,28 @@ def test_plain_numbers_only_no_advice_or_percent():
 
 def test_no_trades_yet_says_so():
     assert tp.patterns()["trades"] == 0 and "no trades imported yet" in tp.patterns()["error"]
+
+
+def test_date_only_trades_stay_out_of_the_time_tables():
+    from botscope import demo_trades
+    from tests.test_trade_import import ROBINHOOD
+    none = {"rows": 0, "not_filled": 0, "unreadable": 0, "unreadable_lines": []}
+    trade_import.save("fills file timed.csv", [trade_import.fill(**x) for x in demo_trades.fills()], none)
+    timed = tp.patterns()
+    trade_import.from_text("robinhood", ROBINHOOD, "rh.csv", None)
+    out = tp.patterns()
+    assert out["trades"] == timed["trades"] + 2 and out["date_only"] == 2 and "Robinhood" in out["date_only_note"]
+    assert out["all"]["trades"] == timed["trades"] + 2
+    assert sum(r["trades"] for r in out["by_weekday"]) == timed["trades"] + 2
+    for k in ("by_hour", "by_day_part", "by_holding", "by_trade_before"):
+        assert sum(r["trades"] for r in out[k]) == timed["trades"], k
+    assert timed["date_only"] == 0 and timed["date_only_note"] is None
+
+
+def test_a_date_range_keeps_only_those_trades():
+    trade_import.from_demo()
+    out = tp.patterns(since="2026-09-01", until="2026-09-30")
+    assert out["from"] >= "2026-09-01" and out["to"] <= "2026-09-30"
+    assert out["trades"] == sum(t["opened"].startswith("2026-09") for t in trade_import.trades())
+    assert "no trades between" in tp.patterns(since="2027-01-01")["error"]
+    assert "isn't a date" in tp.patterns(until="September")["error"]

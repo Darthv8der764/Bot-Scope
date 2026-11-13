@@ -282,6 +282,10 @@ def log_paper_day(bid, symbol, d, cls, bs, day_over=False):
 
 def why_not_here(bot: str, symbol: str, day: str, hhmm: str) -> dict:
     st = build(bot, symbol, day)
+    if st["bot"]["timeframe"] == "1Day":         # a daily candle has no clock time: that day's candle, whatever hhmm says
+        t = datetime.combine(date.fromisoformat(day or st["day"]), time(0), ET)
+        r = st["reasons"].get(str(chart_time(t)))
+        return {"day": str(t.date()), **(r or {"kind": "none", "reason": "no daily candle that day (market closed?)"})}
     t = datetime.combine(date.fromisoformat(st["day"]), time.fromisoformat(hhmm), ET)
     r = st["reasons"].get(str(chart_time(t)))
     return {"time": hhmm, **(r or {"kind": "none", "reason": "no bar at that time (market closed or no trades)"})}
@@ -323,7 +327,7 @@ def veto_scorecard(bot: str | None = None) -> dict:
             seen = {v["id"]: v for v in st["vetoed"]}
             err = None
         except Exception as e:     # bot renamed or data unavailable: still list the veto
-            seen, err = {}, str(e)
+            seen, err = {}, say(e)
         for r in vs:
             v = seen.get(r["trade_id"], {})
             wr = v.get("would_have_r")
@@ -435,7 +439,12 @@ def drawings_for_claude(bot: str | None = None, symbol: str | None = None, day: 
             t0, t1 = sorted((a["time"], b["time"])); p0, p1 = sorted((a["price"], b["price"]))
         else:
             t0, t1, p0, p1 = a["time"], b["time"], a["price"], b["price"]
-        hm = lambda x: datetime.fromtimestamp(x, timezone.utc).strftime("%H:%M")   # noqa: E731  (chart time is already ET)
+        try:
+            daily = loader.get(r["bot"]).timeframe == "1Day"
+        except (KeyError, ValueError, RuntimeError):
+            daily = False
+        fmt = "%Y-%m-%d" if daily else "%H:%M"                  # a daily candle has a day, not a clock time
+        hm = lambda x: datetime.fromtimestamp(x, timezone.utc).strftime(fmt)   # noqa: E731  (chart time is already ET)
         item = {"id": r["id"], "kind": r["kind"], "note": r.get("note", ""), "bot": r["bot"], "symbol": r["symbol"],
                 "day": r["day"], "saved_at": r["saved_at"]}
         if r["kind"] == "line":
@@ -457,7 +466,7 @@ def drawings_for_claude(bot: str | None = None, symbol: str | None = None, day: 
             item["trades_touching"] = [t["id"] for t in st["trades"] + st["vetoed"]
                                        if t.get("t_in", t.get("t")) <= hi and t.get("t_out", t.get("t")) >= lo]
         except Exception as e:  # data unavailable: still return the drawing itself
-            item["context_error"] = str(e)
+            item["context_error"] = say(e)
         out.append(item)
     return out
 
@@ -621,6 +630,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, setup_guide.import_alpaca())
         except (KeyError, ValueError, RuntimeError, json.JSONDecodeError) as e:
             return self._send(400, {"error": say(e)})
+        except Exception as e:      # e.g. Alpaca refusing the keys: answer instead of dropping the connection
+            return self._send(502, {"error": say(e)})
         return self._send(404, {"error": "not found"})
 
     def _factory_research(self):
@@ -638,7 +649,10 @@ class _Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", 0)), 10_000)) or b"{}")
         except (ValueError, json.JSONDecodeError):
             return self._send(400, {"error": "bad request"})
-        return self._send(200, factory_run(str(body.get("goal", ""))[:200], research=True))
+        try:
+            return self._send(200, factory_run(str(body.get("goal", ""))[:200], research=True))
+        except Exception as e:      # e.g. Alpaca refusing the keys: answer instead of dropping the connection
+            return self._send(502, {"error": say(e)})
 
     def do_GET(self):
         u = urlparse(self.path)
@@ -654,6 +668,11 @@ class _Handler(BaseHTTPRequestHandler):
                 if q.get("span") and q["span"] != "1d":
                     return self._send(200, build_span(q.get("bot", ""), q.get("symbol"), q.get("day"), q["span"]))
                 return self._send(200, build(q.get("bot", ""), q.get("symbol"), q.get("day")))
+            if u.path == "/favicon.ico":            # BotScope's own icon (browsers ask every page; a 404 is console noise)
+                icon = Path(__file__).resolve().parent.parent / ".claude-plugin" / "icon.png"
+                if icon.is_file():
+                    return self._send(200, icon.read_bytes(), "image/png")
+                return self._send(204, b"", "image/png")
             if u.path == "/zoom":
                 return self._send(200, PAGE.with_name("zoom.html").read_bytes(), "text/html; charset=utf-8")
             if u.path == "/api/zoom":
@@ -687,10 +706,14 @@ class _Handler(BaseHTTPRequestHandler):
                     try:
                         out["orders"] = imports.orders(q.get("bot") or None, int(q.get("days") or 30))
                     except Exception as e:      # demo mode / no keys: the summary still shows
-                        out["orders_error"] = str(e)
+                        out["orders_error"] = say(e)
                 return self._send(200, out)
+            if u.path == "/api/mytrades/export.csv":   # My trades tab: your trades and notes as one CSV
+                from . import trade_import, trade_notes
+                return self._send(200, trade_notes.export_csv(trade_import.trades()).encode(), "text/csv; charset=utf-8")
             if u.path == "/api/mytrades":              # My trades tab: imports, pattern table, trades with notes
-                return self._send(200, mytrades_get(q.get("source") or None, int(q.get("min") or 5)))
+                return self._send(200, mytrades_get(q.get("source") or None, int(q.get("min") or 5),
+                                                    q.get("from") or None, q.get("to") or None))
             if u.path == "/api/friends":
                 from . import friends
                 return self._send(200, friends.listing())
@@ -831,6 +854,8 @@ class _Handler(BaseHTTPRequestHandler):
                                         for k, c in bots.items()])
         except (KeyError, ValueError, RuntimeError) as e:
             return self._send(400, {"error": say(e)})
+        except Exception as e:      # e.g. Alpaca refusing the keys: answer instead of dropping the connection
+            return self._send(502, {"error": say(e)})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -851,6 +876,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, clip.save(name, self.rfile.read(n)))
             except ValueError as e:
                 return self._send(400, {"error": say(e)})
+            except Exception as e:
+                return self._send(502, {"error": say(e)})
         if not self._host_ok() or self.headers.get("Content-Type", "").split(";")[0] != "application/json":
             return self._send(403, {"error": "forbidden"})
         cap = MYTRADES_MAX_BYTES if urlparse(self.path).path == "/api/mytrades/import" else 100_000   # a CSV's text
@@ -906,6 +933,8 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"removed": journal.remove("drawings", body.get("id", ""))})
         except (KeyError, ValueError, RuntimeError, json.JSONDecodeError) as e:
             return self._send(400, {"error": say(e)})
+        except Exception as e:      # e.g. Alpaca refusing the keys: answer instead of dropping the connection
+            return self._send(502, {"error": say(e)})
         self._send(404, {"error": "not found"})
 
 
@@ -921,11 +950,13 @@ def _warm_imports() -> None:
 MYTRADES_MAX_BYTES = 5_000_000
 
 
-def mytrades_get(source: str | None = None, min_trades: int = 5) -> dict:
-    """GET /api/mytrades: what's imported, the pattern table, and the trades with their notes (newest first)."""
+def mytrades_get(source: str | None = None, min_trades: int = 5, since: str | None = None,
+                 until: str | None = None) -> dict:
+    """GET /api/mytrades: what's imported, the pattern table (optionally for a date range), and the trades with their
+    notes (newest first)."""
     from . import trade_import, trade_notes, trade_patterns
     ts = trade_notes.with_notes(trade_import.trades(source))
-    return {"sources": trade_import.sources(), "patterns": trade_patterns.patterns(source, min_trades),
+    return {"sources": trade_import.sources(), "patterns": trade_patterns.patterns(source, min_trades, since, until),
             "trades": list(reversed(ts))[:500], "total": len(ts), "choices": trade_notes.CHOICES}
 
 

@@ -57,7 +57,8 @@ def test_via_mcp_is_always_seen_and_never_blocks_ready():
     assert rows["Claude Code sees BotScope"]["ok"]
 
 
-def test_hooks_found_in_settings_or_from_the_plugin(tmp_path):
+def test_hooks_found_in_settings_or_from_the_plugin(tmp_path, monkeypatch):
+    monkeypatch.setenv("BOTSCOPE_PLUGIN_MODE", "0")
     home, proj = tmp_path / "home", tmp_path / "work"
     (home / ".claude").mkdir(parents=True)
     (proj / ".claude").mkdir(parents=True)
@@ -69,6 +70,32 @@ def test_hooks_found_in_settings_or_from_the_plugin(tmp_path):
     assert hk["botscope.checkpoints"].endswith("settings.local.json") and hk["botscope-guard"] is None
     (home / ".claude" / "settings.json").write_text('{"enabledPlugins": {"botscope@botscope": true}}')
     assert set(doctor._hooks_set(home, proj).values()) == {"the botscope plugin"}
+
+
+def test_plugin_install_reports_the_plugins_own_hooks_as_set(tmp_path, monkeypatch):
+    home, proj = tmp_path / "home", tmp_path / "work"      # no settings anywhere name the plugin or the hooks
+    (home / ".claude").mkdir(parents=True)
+    proj.mkdir()
+    monkeypatch.setenv("BOTSCOPE_PLUGIN_MODE", "1")
+    assert doctor._hooks_set(home, proj) == {"botscope-guard": "provided by the plugin",
+                                             "botscope.checkpoints": "provided by the plugin"}
+    rows = {r["check"]: r for r in doctor.check(via_mcp=True)["checks"]}
+    for name in ("Order guard hook (optional)", "Auto-checkpoint hook (optional)"):
+        assert rows[name]["ok"] and rows[name]["detail"] == "provided by the plugin"
+
+
+def test_developer_copy_still_reads_the_settings_files(tmp_path, monkeypatch):
+    home, proj = tmp_path / "home", tmp_path / "work"
+    (home / ".claude").mkdir(parents=True)
+    proj.mkdir()
+    monkeypatch.setenv("BOTSCOPE_PLUGIN_MODE", "0")
+    assert doctor._hooks_set(home, proj) == {"botscope-guard": None, "botscope.checkpoints": None}
+
+
+def test_plugin_manifest_without_hooks_is_not_counted(tmp_path):
+    (tmp_path / ".claude-plugin").mkdir()
+    (tmp_path / ".claude-plugin" / "plugin.json").write_text('{"name": "botscope"}')
+    assert doctor._plugin_hooks(tmp_path) == {"botscope-guard": None, "botscope.checkpoints": None}
 
 
 def test_missing_hooks_never_block_ready():

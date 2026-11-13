@@ -35,3 +35,10 @@ def test_missing_level_is_named_not_fatal():
         return fetch(sym, a, b, tf, feed)
     z = zoom.stack("AAPL", "2026-09-02", fetch=bad)
     assert z["levels"][1]["candles"] == [] and z["problems"][0].startswith("15Min")
+
+
+def test_here_marker_is_never_cut_off_at_the_chart_edge():
+    """The 9:30 "here" sat on the first candle and its label was clipped to "re" (QA pass 2026-11-12)."""
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "botscope" / "web" / "zoom.html").read_text()
+    assert "setVisibleLogicalRange({ from: -4, to: L.candles.length + 3 })" in page and "fitContent()" not in page

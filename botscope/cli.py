@@ -223,7 +223,9 @@ def main(argv: list[str] | None = None, wait: bool = True) -> int:
     try:
         out = ts[name](**kw)
     except Exception as e:  # noqa: BLE001 - say what broke instead of a wall of traceback
-        print(f"{name} stopped with an error ({type(e).__name__}): {e}", file=sys.stderr)
+        from .errtext import keys_rejected, say
+        print(f"{name}: {say(e)}" if keys_rejected(e) else f"{name} stopped with an error ({type(e).__name__}): {e}",
+              file=sys.stderr)                         # Alpaca's 401 page reads as one plain sentence
         return 2
     print(json.dumps(out, indent=1, default=str) if as_json else "\n".join(render(out)))
     _keep_page_open(wait)

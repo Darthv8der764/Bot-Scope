@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import backtest, confidence, data, journal
 from .data import ET
+from .errtext import short
 
 MAX_CATCHUP_DAYS = 30          # one update replays at most this many missed days (keeps it light)
 
@@ -87,7 +88,7 @@ def update(now: datetime | None = None, replay=None) -> dict:
                                        {"day": str(d), **s})
                         new += 1
                 except Exception as e:
-                    problems.append(f"{p['name']} {d}: {type(e).__name__}: {str(e)[:80]}")
+                    problems.append(f"{p['name']} {d}: {short(e, 80)}")
                     break
             journal.upsert("phantom", {"id": p["id"]}, {**p, "checked_to": str(d)})
             p["checked_to"] = str(d)

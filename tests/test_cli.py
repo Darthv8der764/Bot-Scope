@@ -134,3 +134,17 @@ def test_no_arguments_in_demo_points_at_the_tour(capsys, monkeypatch):
     monkeypatch.setenv("BOTSCOPE_DEMO", "1")
     assert cli.main([]) == 0
     assert "`botscope demo` is the 2-minute tour" in capsys.readouterr().out
+
+
+def test_alpaca_refusing_the_keys_reads_plainly_in_free_mode(capsys, monkeypatch):
+    """botscope <tool> printed Alpaca's raw "<html>...401 Authorization Required..." page (QA pass 2026-11-12)."""
+    class APIError(Exception):              # the same name and field as alpaca.common.exceptions.APIError
+        status_code = 401
+
+    def boom(bot: str) -> dict:
+        """Boom."""
+        raise APIError("<html><title>401 Authorization Required</title></html>")
+    monkeypatch.setattr(cli, "tools", lambda: {"boom": boom})
+    assert cli.main(["boom", "x"]) == 2
+    err = capsys.readouterr().err
+    assert "Alpaca didn't accept your saved keys" in err and "<html" not in err

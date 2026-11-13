@@ -20,7 +20,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from . import backtest, loader
+from . import backtest, indicators, loader
 
 TRADING_DAYS_MONTH = 21
 SIMS = 2000
@@ -163,6 +163,7 @@ def play(bot_id: str, rules_off: list[str] | None = None, side: str = "both", po
             "unknown_rules": sorted(unknown), "as_coded": base, "this_mix": mix,
             "total_r": round(sum(t.r for t in trs), 2), "trades": len(trs),
             "problems": c["problems"], "precompute_seconds": c["seconds"],
+            "indicators": indicators.CATALOG,
             "toggle_seconds": round(time.time() - t0, 3) if bot_id in _cache or fetch else None,
             "note": "Untested days only, after costs. Turning a rule off adds back the near misses it blocked, played "
                     "out on paper; knock-on effects aren't re-run. A range, not a promise. Not financial advice."}

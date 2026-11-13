@@ -18,6 +18,10 @@
   .mt .noteform .wide { grid-column: 1 / -1; }
   .mt tr.noterow > td { background: var(--bg); }
   .mt .srcs li { margin: 2px 0; }
+  .mt .cal { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); gap: 4px; max-width: 520px; font-size: 12px; }
+  .mt .cal .wd { color: var(--muted); text-align: center; } .mt .cal .wk { color: var(--muted); padding-right: 6px; white-space: nowrap; }
+  .mt .cal .d { border-radius: 6px; min-height: 34px; padding: 3px 5px; background: var(--bg); border: 1px solid var(--line); line-height: 1.2; }
+  .mt .cal .d b { display: block; font-size: 11px; } .mt .cal .d.empty { border-style: dashed; opacity: .5; }
   @media (max-width: 600px) { .mt table.trades tr.noterow { display: block; } .mt table.trades tr.noterow > td { display: block; } }`;
   document.head.appendChild(css);
 
@@ -31,6 +35,8 @@
   <div class="card"><h2>Import</h2>
     <div class="row"><select id="mtBroker" aria-label="Where the trades come from">
       <option value="webull">Webull orders CSV</option>
+      <option value="robinhood">Robinhood account activity CSV</option>
+      <option value="fidelity">Fidelity account history CSV</option>
       <option value="fills">Fills CSV (symbol, side, qty, price, time, tz)</option>
       <option value="alpaca">Alpaca paper account (last 90 days)</option>
       <option value="demo">Demo trades (made up)</option></select></div>
@@ -41,7 +47,12 @@
     <p class="muted" id="mtHint"></p>
     <div class="row"><button type="button" class="primary" id="mtGo">Import</button><span class="muted" id="mtMsg" role="status"></span></div>
     <div id="mtSources"></div></div>
-  <div class="card"><h2>Pattern table</h2><div id="mtPatterns"><p class="muted">Loading…</p></div></div>
+  <div class="card"><h2>Pattern table</h2>
+    <div class="row"><label class="muted" for="mtFrom">From</label><input type="date" id="mtFrom" aria-label="Trades opened from">
+      <label class="muted" for="mtTo">to</label><input type="date" id="mtTo" aria-label="Trades opened up to">
+      <button type="button" class="linkbtn" id="mtAll">all dates</button></div>
+    <div id="mtPatterns"><p class="muted">Loading…</p></div></div>
+  <div class="card"><h2>Calendar</h2><div id="mtCal"><p class="muted">Loading…</p></div></div>
   <div class="card"><h2>Trades and notes</h2><div id="mtTrades"><p class="muted">Loading…</p></div></div></div>`;
 
   const post = async (path, body) => {
@@ -57,10 +68,12 @@
   let data = null, showAll = false;
 
   function brokerUi() {
-    const b = $("mtBroker").value, file = b === "webull" || b === "fills";
-    $("mtFileRow").hidden = !file; $("mtTzRow").hidden = !file;
+    const b = $("mtBroker").value, file = ["webull", "fills", "robinhood", "fidelity"].includes(b);
+    $("mtFileRow").hidden = !file; $("mtTzRow").hidden = !(b === "webull" || b === "fills");
     $("mtHint").textContent = {
       webull: "Webull: History tab → Export Orders (it's emailed to you). Its column names aren't confirmed yet: if they don't match, you'll see the file's columns. Times are read in the time zone you pick, and shown in US Eastern.",
+      robinhood: "Robinhood: Account → Reports and statements → Account activity reports → Generate new report (it can take a few hours). Stock trades only, dates but no times, so they stay out of the time-of-day tables. Its column names aren't confirmed yet: if they don't match, you'll see the file's columns.",
+      fidelity: "Fidelity: Activity & Orders → download the history as a CSV. Stock trades only, dates but no times, so they stay out of the time-of-day tables. Its column names aren't confirmed yet: if they don't match, you'll see the file's columns.",
       fills: "One row per fill. The tz column (or the time zone above) says what time zone each time is in.",
       alpaca: "Reads your filled orders from your Alpaca PAPER account (read-only). Orders marked as a bot's are left out.",
       demo: "A made-up trader's 8 weeks of trades with notes, to see how the table works. Not real.",
@@ -70,7 +83,7 @@
   async function doImport() {
     const b = $("mtBroker").value, body = { broker: b };
     $("mtMsg").textContent = "";
-    if (b === "webull" || b === "fills") {
+    if (["webull", "fills", "robinhood", "fidelity"].includes(b)) {
       const f = $("mtFile").files[0];
       if (!f) { $("mtMsg").textContent = "Pick the CSV file first."; return; }
       if (b === "webull" && !$("mtTz").value.trim()) { $("mtMsg").textContent = "Which time zone are the file's times in?"; $("mtTz").focus(); return; }
@@ -81,9 +94,14 @@
       const r = await post("/api/mytrades/import", body);
       const parts = [`${r.round_trips} round trips from ${r.fills_read} fills`];
       if (r.bot_orders_skipped) parts.push(`${r.bot_orders_skipped} bot orders left out`);
+      if (r.options_skipped) parts.push(`${r.options_skipped} option rows skipped (stocks only for now)`);
+      if (r.not_trades) parts.push(`${r.not_trades} rows that aren't trades (dividends, transfers…) skipped`);
+      if (r.duplicates_skipped) parts.push(`${r.duplicates_skipped} already imported from another source, left out`);
       if (r.not_filled) parts.push(`${r.not_filled} rows not filled (cancelled or open)`);
       if (r.unreadable) parts.push(`${r.unreadable} rows couldn't be read: ${r.unreadable_lines.join("; ")}`);
       if (r.still_open) parts.push(r.still_open);
+      if (r.sold_before) parts.push(r.sold_before);
+      if (r.demo_removed) parts.push(r.demo_removed);
       $("mtMsg").textContent = parts.join(" · ") + ".";
       await load();
     } catch (e) { $("mtMsg").textContent = e.message; }
@@ -100,12 +118,14 @@
   const ptable = (title, rows) => rows && rows.length ? `<h3>${title}</h3><div class="tablewrap"><table class="trades">${head}${rows.map(prow).join("")}</table></div>` : "";
 
   function drawPatterns(p) {
-    if (!p || !p.trades) { $("mtPatterns").innerHTML = `<p class="muted">No trades imported yet. Import above, or try the demo trades.</p>`; return; }
+    if (p && p.error && data.total) { $("mtPatterns").innerHTML = `<p class="muted">${esc(p.error)}</p>`; return; }
+    if (!p || !p.trades) { $("mtPatterns").innerHTML = `<p class="muted">No trades imported yet. Import yours above, or see how it works first:</p>
+      <p><button type="button" class="primary" data-demo>Try it on made-up demo trades</button></p>`; return; }
     $("mtPatterns").innerHTML = `<p class="muted">${p.trades} trades, ${esc(p.from)} to ${esc(p.to)} · ${esc(p.times)} ·
       rows under ${p.min_trades} trades are too small to compare.${p.sources.some((s) => /MADE-UP/.test(s)) ? " <b>Includes made-up demo trades.</b>" : ""}</p>
       ${ptable("All trades", [p.all])}${ptable("By setup", p.by_setup)}${ptable("By hour (entry)", p.by_hour)}
       ${ptable("By weekday", p.by_weekday)}${ptable("By weekday and time of day", p.by_day_part)}${ptable("By holding time", p.by_holding)}${ptable("By the trade before it (same day)", p.by_trade_before)}
-      <p class="muted">${esc(p.note)}</p>`;
+      ${p.date_only_note ? `<p class="muted">${esc(p.date_only_note)}</p>` : ""}<p class="muted">${esc(p.note)}</p>`;
   }
 
   const sel = (id, key, val) => `<select id="${id}"><option value=""></option>${(data.choices[key] || []).map((c) => `<option${c === val ? " selected" : ""}>${esc(c)}</option>`).join("")}</select>`;
@@ -129,6 +149,35 @@
     <td class="num" data-l="Exit">${px(t.exit)}</td><td class="num ${cls(t.pnl)}" data-l="$">${usd(t.pnl)}</td><td class="num" data-l="R">${fmtR(t.r)}</td>
     <td data-l="Setup">${esc(t.setup || "")}</td><td data-l="Note"><button type="button" class="linkbtn" data-note="${esc(t.trade_id)}">${t.note || t.setup || t.stop ? "Edit note" : "Add note"}</button></td></tr>`;
 
+  function drawCalendar() {             // one square per weekday: the day's total, green made money, red lost
+    const from = $("mtFrom").value, to = $("mtTo").value, days = {};
+    for (const t of data.trades) {
+      const d = t.opened.slice(0, 10);
+      if ((from && d < from) || (to && d > to)) continue;
+      (days[d] = days[d] || { n: 0, usd: 0 }).n++; days[d].usd += t.pnl;
+    }
+    const keys = Object.keys(days).sort();
+    if (!keys.length) { $("mtCal").innerHTML = `<p class="muted">No trades to show.</p>`; return; }
+    const big = Math.max(...keys.map((k) => Math.abs(days[k].usd))) || 1;
+    const day = (s) => new Date(s + "T12:00:00Z"), iso = (d) => d.toISOString().slice(0, 10);
+    let d = day(keys[0]); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));        // back to Monday
+    const end = day(keys[keys.length - 1]), cells = ["<span></span>", ..."Mon Tue Wed Thu Fri".split(" ").map((w) => `<span class="wd">${w}</span>`)];
+    for (; d <= end; d.setUTCDate(d.getUTCDate() + 7)) {
+      cells.push(`<span class="wk">${esc(iso(d).slice(5))}</span>`);
+      for (let i = 0; i < 5; i++) {
+        const k = iso(new Date(d.getTime() + i * 864e5)), x = days[k];
+        if (!x) { cells.push(`<span class="d empty" title="${k}: no trades"></span>`); continue; }
+        const mix = Math.round(20 + 60 * Math.abs(x.usd) / big), c = x.usd > 0 ? "--up" : x.usd < 0 ? "--down" : "--line";
+        const say = `${k}: ${x.n} trade${x.n === 1 ? "" : "s"}, ${usd(Math.round(x.usd * 100) / 100)}`;
+        cells.push(`<span class="d" title="${esc(say)}" aria-label="${esc(say)}" style="background: color-mix(in srgb, var(${c}) ${mix}%, var(--panel))">
+          <b>${x.usd > 0 ? "+" : x.usd < 0 ? "−" : "="} ${k.slice(8)}</b>${x.n}</span>`);
+      }
+    }
+    $("mtCal").innerHTML = `<p class="muted">One square per weekday: + made money, − lost, darker means a bigger day. The number is
+      how many trades. Hover or tap a square for the day's total.${data.total > data.trades.length ? ` Newest ${data.trades.length} trades only.` : ""}</p>
+      <div class="cal" role="list">${cells.join("")}</div>`;
+  }
+
   function drawTrades() {
     const ts = data.trades, list = showAll ? ts : ts.slice(0, 50);
     if (!ts.length) { $("mtTrades").innerHTML = `<p class="muted">No trades yet.</p>`; return; }
@@ -142,21 +191,39 @@
   function drawSources() {
     const s = data.sources;
     $("mtSources").innerHTML = s.length ? `<h3>Imported</h3><ul class="srcs">${s.map((x) => `<li>${esc(x.source)}: ${x.trades} trades, ${esc(x.from)} to ${esc(x.to)}
-      <button type="button" class="linkbtn" data-forget="${esc(x.source)}">remove</button></li>`).join("")}</ul>` : "";
+      <button type="button" class="linkbtn" data-forget="${esc(x.source)}">remove</button></li>`).join("")}</ul>
+      <p><a href="/api/mytrades/export.csv" download="my-trades.csv">Download my trades and notes (CSV)</a>
+      <span class="muted">· saved to this computer, for any spreadsheet</span></p>` : "";
   }
 
+  const mtUrl = () => {                           // the pattern table's date range, when one is set
+    const p = new URLSearchParams();
+    if ($("mtFrom").value) p.set("from", $("mtFrom").value);
+    if ($("mtTo").value) p.set("to", $("mtTo").value);
+    return "/api/mytrades" + (p.toString() ? "?" + p : "");
+  };
+
   async function load() {
-    try { data = await (await fetch("/api/mytrades")).json(); }
+    try { data = await (await fetch(mtUrl())).json(); }
     catch (e) { $("mtPatterns").innerHTML = `<p class="muted">Could not load: ${esc(e.message)}</p>`; return; }
-    drawSources(); drawPatterns(data.patterns); drawTrades();
+    drawSources(); drawPatterns(data.patterns); drawCalendar(); drawTrades();
   }
+
+  window.tryMyTradesDemo = async () => {         // Get started's button: import the made-up trades, then open the tab
+    await post("/api/mytrades/import", { broker: "demo" });
+    show("mytrades");
+    if (document.querySelector(".mt").dataset.wired) await load();
+  };
 
   window.loadMyTrades = () => {
     const root = document.querySelector(".mt");
     if (!root.dataset.wired) {
       root.dataset.wired = "1";
       $("mtBroker").onchange = brokerUi; $("mtGo").onclick = doImport;
+      $("mtFrom").onchange = $("mtTo").onchange = load;
+      $("mtAll").onclick = () => { $("mtFrom").value = ""; $("mtTo").value = ""; load(); };
       root.addEventListener("click", async (e) => {
+        if (e.target.closest("[data-demo]")) { $("mtBroker").value = "demo"; brokerUi(); doImport(); return; }
         const n = e.target.closest("[data-note]"), c = e.target.closest("[data-close]"), f = e.target.closest("[data-forget]");
         if (n) {
           const tr = n.closest("tr"), open = tr.nextElementSibling && tr.nextElementSibling.classList.contains("noterow");
@@ -184,7 +251,7 @@
           msg.textContent = "Saved.";
           const tr = form.closest("tr.noterow").previousElementSibling;
           tr.outerHTML = trow(t);
-          fetch("/api/mytrades").then((r) => r.json()).then((d) => { data = d; drawPatterns(d.patterns); }).catch(() => {});
+          fetch(mtUrl()).then((r) => r.json()).then((d) => { data = d; drawPatterns(d.patterns); }).catch(() => {});
         } catch (err) { msg.textContent = err.message; }
       });
       brokerUi();

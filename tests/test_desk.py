@@ -235,3 +235,10 @@ def test_my_bots_last_paper_day_says_trades():
     from pathlib import Path
     html = (Path(__file__).resolve().parent.parent / "botscope/web/desk.html").read_text()
     assert '${r.last_paper.trades} trade${r.last_paper.trades === 1 ? "" : "s"}' in html
+
+
+def test_sector_tiles_never_break_a_word_mid_letter():
+    """A narrow tile wrapped "Communication" as "Communicatio / n": long names get a soft hyphen instead."""
+    from pathlib import Path
+    page = (Path(desk.__file__).with_name("web") / "desk.html").read_text()
+    assert "<b>${softWrap(r.name)}</b>" in page and "overflow-wrap: anywhere" not in page.split(".tile b {")[1].split("}")[0]

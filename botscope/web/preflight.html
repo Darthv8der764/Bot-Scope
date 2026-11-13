@@ -6,7 +6,7 @@
 <script src="/theme.js"></script>
 <title>Daily Pre-flight</title>
 <style>
-:root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --up: #1a9e6a; --down: #d64545; --accent: #3b6fd8; --chip: #efeee9; }
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd; --up: #137d55; --down: #c23b3b; --accent: #3b6fd8; --chip: #efeee9; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --chip: #262624; } }
 :root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #ecebe6; --muted: #9a9a94; --line: #2c2c2a; --up: #2fbf86; --down: #ef6363; --accent: #6d97ee; --chip: #262624; }
 * { box-sizing: border-box; }
@@ -51,7 +51,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 async function load() {
   const r = await fetch("/api/preflight"); const L = await r.json();   // fast: the calendar loads after
-  fetch("/api/preflight?events=1").then((x) => x.json()).then((E) => showEvents(E.events_today || [])).catch(() => {});
+  fetch("/api/preflight?events=1").then((x) => x.json()).then((E) => showEvents(E.events_today || []))
+    .catch(() => { $("events").dataset.done = "1"; $("events").innerHTML = `<b>Today</b>: <span class="muted">market calendar unavailable</span>`; });
   if (L.error) { $("sub").textContent = L.error; return; }
   $("sub").textContent = `${L.day} · settings from: ${L.answered_by}`;
   $("stopped").innerHTML = L.stopped ? `<div class="banner">STOP is on: every bot is off until you resume (STOP button on the chart).</div>` : "";

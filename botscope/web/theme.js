@@ -39,7 +39,7 @@
     :root[data-cb]:not([data-theme="light"]) { --on-down: #111; } }
   :root[data-theme="dark"] { --on-accent: #0d1220; }
   :root[data-theme="dark"][data-cb] { --on-down: #111; }
-  :root[data-cb] { --up: #0072b2; --down: #d55e00; --stop: #d55e00; --target: #0072b2; }
+  :root[data-cb] { --up: #0072b2; --down: #b84f00; --stop: #b84f00; --target: #0072b2; }   /* 4.5:1+ on white */
   @media (prefers-color-scheme: dark) { :root[data-cb]:not([data-theme="light"]) { --up: #56b4e9; --down: #e69f00; --stop: #e69f00; --target: #56b4e9; } }
   :root[data-cb][data-theme="dark"] { --up: #56b4e9; --down: #e69f00; --stop: #e69f00; --target: #56b4e9; }
   /* links in dark modes: a soft blue instead of the browser's harsh one (lavender with the color-blind palette, so a
@@ -53,6 +53,8 @@
   .demo-badge { position: fixed; right: 10px; bottom: 10px; z-index: 9999; padding: 5px 10px; border-radius: 999px;
     background: #b45309; color: #fff; font: 700 12px/1.2 system-ui, sans-serif; letter-spacing: .06em;
     box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: help; }
+  .has-demo-badge footer { padding-right: var(--demo-badge-w, 130px) !important; }   /* the badge never covers the "not financial advice" line */
+  @media (max-width: 600px) { .has-demo-badge footer { padding-right: 16px !important; padding-bottom: 44px !important; } }   /* phones: under it */
   [data-closable] { position: relative; }
   .bs-x { position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
     background: transparent; color: inherit; opacity: .6; font: 18px/1 system-ui, sans-serif; cursor: pointer; }
@@ -119,7 +121,9 @@
       const b = document.createElement("div");
       b.className = "demo-badge"; b.setAttribute("role", "status"); b.textContent = m.badge;
       b.title = "Made-up prices: results mean nothing about real markets. " + m.how;
-      document.body.appendChild(b);
+      document.body.appendChild(b); document.body.classList.add("has-demo-badge");
+      const fit = () => document.body.style.setProperty("--demo-badge-w", b.offsetWidth + 24 + "px");   // its width in any language
+      fit(); if (window.ResizeObserver) new ResizeObserver(fit).observe(b);
     }
   });
 })();

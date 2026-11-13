@@ -16,6 +16,7 @@ from datetime import date, datetime, time, timedelta
 from . import backtest, confidence, data, journal, loader
 from .bot import Entry, NoTrade, View
 from .data import ET, UTC
+from .errtext import KeysRejected, short
 
 WINDOW_MIN = 15          # an entry this many minutes before the latest bar still counts as "now"
 MAX_SYMBOLS = 20         # per bot, so one long watchlist can't stall the page
@@ -192,8 +193,10 @@ def scan(include_examples: bool = False, window_min: int = WINDOW_MIN, now: date
             if got is None:
                 try:
                     got = scan_symbol(cls, sym, now, window_min, fetch)
+                except KeysRejected:        # Alpaca refused the keys: every stock symbol fails, say it once
+                    raise
                 except Exception as e:      # one symbol without data never stops the rest
-                    got = {"kind": None, "problems": [f"{sym}: no data ({type(e).__name__}: {str(e)[:120]})"],
+                    got = {"kind": None, "problems": [f"{sym}: no data ({short(e)})"],
                            "last_bar": None}
                 with _cache_lock:
                     if len(_cache) > 2000:

@@ -11,6 +11,8 @@ from __future__ import annotations
 import statistics
 from datetime import date, timedelta
 
+from .errtext import short
+
 BIG_X = 3.0           # a big move day = |move| >= 3x the median absolute daily move
 MAX_BIG = 8
 
@@ -63,7 +65,7 @@ def key_dates(symbol: str, today: date | None = None, earnings=None, corporate=N
         try:
             rows += fn(sym, a, b)
         except Exception as e:      # one missing source never blanks the rest
-            problems.append(f"{name}: unavailable ({type(e).__name__}: {str(e)[:80]})")
+            problems.append(f"{name}: unavailable ({short(e, 80)})")
     if not any(r["kind"] == "earnings" and r["date"] < str(today) for r in rows) and not problems[:1]:
         problems.append("past earnings: none returned (Finnhub's free calendar may only list recent and upcoming "
                         "ones); big move days often fall on them")

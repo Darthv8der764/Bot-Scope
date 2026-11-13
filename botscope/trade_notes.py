@@ -80,3 +80,26 @@ def with_notes(trades: list[dict]) -> list[dict]:
         out.append({**t, "setup": n.get("setup"), "stop": n.get("stop"), "r": r_of(t, n.get("stop")),
                     "note": n.get("note"), "checklist": n.get("checklist") or {}})
     return out
+
+
+EXPORT = ("trade_id", "source", "symbol", "side", "opened", "closed", "qty", "entry", "exit", "pnl", "setup", "stop", "r",
+          "note") + tuple(f"checklist_{k}" for k in CHECKLIST)
+
+
+def _cell(v) -> str:
+    """Text that a spreadsheet could run as a formula (=, +, -, @ at the start) gets a leading quote."""
+    s = "" if v is None else str(v)
+    return "'" + s if isinstance(v, str) and s[:1] in ("=", "+", "-", "@") else s
+
+
+def export_csv(trades: list[dict]) -> str:
+    """Your trades with their notes as one CSV (your data is yours: open it in any spreadsheet). US Eastern times."""
+    import csv
+    import io
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(EXPORT)
+    for t in with_notes(trades):
+        answers = t.get("checklist") or {}
+        w.writerow([_cell(t.get(k)) for k in EXPORT[:14]] + [_cell(answers.get(k)) for k in CHECKLIST])
+    return out.getvalue()

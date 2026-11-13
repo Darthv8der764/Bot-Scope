@@ -32,3 +32,11 @@ def test_only_webm_is_saved_locally():
         clip.save("x", b"<html>not a video")
     out = clip.save("../../etc/x", b"\x1a\x45\xdf\xa3" + b"0" * 10)
     assert out["saved"].startswith(str(clip.folder())) and ".." not in out["saved"].rsplit("/", 1)[1]
+
+
+def test_record_button_says_so_when_the_browser_cannot_record_webm():
+    """Safari records only MP4: new MediaRecorder(..., video/webm) threw, so the button silently did nothing, and a
+    failed save left it disabled (QA pass 2026-11-12)."""
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "botscope" / "web" / "clip.html").read_text()
+    assert 'MediaRecorder.isTypeSupported("video/webm")' in page and "Couldn't save: \" + e.message" in page

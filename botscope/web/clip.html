@@ -60,13 +60,18 @@ function play(done) {
 }
 $("play").onclick = () => play();
 $("rec").onclick = () => {
-  if (!window.MediaRecorder) { $("msg").textContent = "This browser can't record video."; return; }
+  // Safari records only MP4, and clips are saved as WebM: say so instead of a button that does nothing
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported("video/webm")) {
+    $("msg").textContent = "This browser can't record WebM video. Open this page in Chrome, Edge or Firefox to save the clip."; return;
+  }
   const chunks = [], rec = new MediaRecorder(cv.captureStream(30), { mimeType: "video/webm" });
   rec.ondataavailable = e => e.data.size && chunks.push(e.data);
   rec.onstop = async () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const r = await fetch("/api/clip/save?name=" + encodeURIComponent(D.name), { method: "POST", headers: { "Content-Type": "video/webm" }, body: blob }).then(x => x.json());
-    $("msg").textContent = r.error ? "Couldn't save: " + r.error : `Saved ${r.saved} (${Math.round(r.bytes / 1024)} KB). ${r.note}`;
+    try {
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const r = await fetch("/api/clip/save?name=" + encodeURIComponent(D.name), { method: "POST", headers: { "Content-Type": "video/webm" }, body: blob }).then(x => x.json());
+      $("msg").textContent = r.error ? "Couldn't save: " + r.error : `Saved ${r.saved} (${Math.round(r.bytes / 1024)} KB). ${r.note}`;
+    } catch (e) { $("msg").textContent = "Couldn't save: " + e.message; }
     $("rec").disabled = false;
   };
   $("rec").disabled = true; $("msg").textContent = "Recording…"; rec.start(); play(() => rec.stop());

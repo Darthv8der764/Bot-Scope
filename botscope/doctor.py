@@ -54,9 +54,24 @@ def _claude_sees_botscope(home: Path | None = None, cwd: Path | None = None) -> 
 HOOKS = {"botscope-guard": "Order guard hook", "botscope.checkpoints": "Auto-checkpoint hook"}
 
 
+def _plugin_hooks(root: Path | None = None) -> dict[str, str | None]:
+    """Hooks this copy's own plugin manifest (.claude-plugin/plugin.json) brings. Claude Code runs them for an installed
+    plugin, whichever settings file enabled it, so nothing has to be added to the user's settings."""
+    try:
+        groups = json.loads(((root or env.ROOT) / ".claude-plugin" / "plugin.json").read_text())["hooks"]["PreToolUse"]
+        cmds = [" ".join([h.get("command", ""), *h.get("args", [])]) for g in groups for h in g.get("hooks", [])]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        cmds = []
+    return {h: "provided by the plugin" if any(h in c for c in cmds) else None for h in HOOKS}
+
+
 def _hooks_set(home: Path | None = None, cwd: Path | None = None) -> dict[str, str | None]:
     """Where each BotScope hook is set up in Claude Code (the plugin brings both), or None. Reads hook commands only."""
     home, cwd = home or Path.home(), cwd or Path.cwd()
+    if userdata.plugin_install():
+        given = _plugin_hooks()
+        if all(given.values()):
+            return given
     if _claude_sees_botscope(home, cwd) == "the botscope plugin":
         return {h: "the botscope plugin" for h in HOOKS}
     files = [home / ".claude" / n for n in ("settings.json", "settings.local.json")]

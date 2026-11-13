@@ -7,7 +7,7 @@
 <script src="/vendor/lightweight-charts-4.2.3.standalone.js"></script>
 <title>Flight Simulator</title>
 <style>
-:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --line: #e3e2dd; --accent: #2f6fde; }
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #137d55; --down: #c23b3b; --line: #e3e2dd; --accent: #2f6fde; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; } }
 :root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; }
 * { box-sizing: border-box; }
@@ -112,7 +112,7 @@ async function finish() {
   <table><tr><th>Who</th><th>Side</th><th>In → out</th><th>Result</th><th>Why out</th></tr>
   ${mine.map((t) => `<tr><td>You</td><td>${t.side}</td><td>${t.entry.toFixed(2)} → ${t.exit.toFixed(2)}</td><td>${pct(t.pct)}</td><td>${esc(t.why)}</td></tr>`).join("")}
   ${D.bot_trades.map((t) => `<tr><td>Bot</td><td>${t.side}</td><td>${t.entry.toFixed(2)} → ${t.exit.toFixed(2)}</td><td>${pct(t.pct)}</td><td>${esc(t.why_out)}</td></tr>`).join("")}</table>
-  <p class="muted">${esc(saved.summary || "")}${saved.summary ? ". " : ""}One day is mostly luck, for you and for the bot: play several days before reading anything into it. ${esc(D.note)}</p></div>`;
+  <p class="muted">${esc(saved.summary || "")}${saved.summary ? ". " : ""}${esc(D.note)}</p></div>`;
 }
 async function load(sym, day) {
   const u = new URLSearchParams({ bot: q.get("bot") || "first_hour_breakout" });

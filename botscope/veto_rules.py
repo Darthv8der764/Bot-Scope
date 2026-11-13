@@ -23,8 +23,9 @@ def _features(v: dict) -> dict:
     return {"side": v.get("side"), "time": t, "symbol": v.get("symbol"), "risk_pct": risk}
 
 
-def patterns(vetoes: list[dict]) -> list[dict]:
-    """Candidate rules from what the vetoes have in common. [{filters, plain, evidence}]"""
+def patterns(vetoes: list[dict], daily: bool = False) -> list[dict]:
+    """Candidate rules from what the vetoes have in common. [{filters, plain, evidence}]. A daily bot's trades have
+    no time of day (their ids end in 0000), so it gets no before/after-time rules."""
     n = len(vetoes)
     if n < MIN_VETOES:
         return []
@@ -39,16 +40,18 @@ def patterns(vetoes: list[dict]) -> list[dict]:
     if sym and k >= need:
         out.append({"filters": {"skip_symbols": [sym]}, "plain": f"Don't trade {sym} with this bot.",
                     "evidence": f"{k} of your {n} vetoes were on {sym}"})
-    times = sorted(x["time"] for x in f if x["time"])
+    times = [] if daily else sorted(x["time"] for x in f if x["time"])
     if len(times) >= need:
         late = times[-need]                           # the earliest time that still covers `need` of the vetoes
         cut = f"{late.hour:02d}:{max(late.minute - 1, 0):02d}" if late.minute else f"{late.hour - 1:02d}:59"
-        out.append({"filters": {"skip_after": cut}, "plain": f"No new trades after {cut}.",
-                    "evidence": f"{need} of your {n} vetoes were at {late:%H:%M} or later"})
+        if late > time(0, 0):                         # nothing is earlier than midnight ("after -1:59")
+            out.append({"filters": {"skip_after": cut}, "plain": f"No new trades after {cut}.",
+                        "evidence": f"{need} of your {n} vetoes were at {late:%H:%M} or later"})
         early = times[need - 1]
         cut2 = f"{early.hour:02d}:{early.minute + 1:02d}" if early.minute < 59 else f"{early.hour + 1:02d}:00"
-        out.append({"filters": {"skip_before": cut2}, "plain": f"No trades before {cut2}.",
-                    "evidence": f"{need} of your {n} vetoes were at {early:%H:%M} or earlier"})
+        if early < time(23, 59):                      # nothing is later than 23:59 ("before 24:00")
+            out.append({"filters": {"skip_before": cut2}, "plain": f"No trades before {cut2}.",
+                        "evidence": f"{need} of your {n} vetoes were at {early:%H:%M} or earlier"})
     risks = sorted(x["risk_pct"] for x in f if x["risk_pct"])
     if len(risks) >= need:
         r = risks[-need]
@@ -92,7 +95,7 @@ def suggest(bot: str, fetch=None, days: int = backtest.QUICK_DAYS) -> dict:
     cls = loader.get(bot)
     bid = loader.bot_id(cls)
     vetoes = journal.find("vetoes", bot=bid)
-    cands = patterns(vetoes)
+    cands = patterns(vetoes, daily=cls.timeframe == "1Day")
     if not cands:
         return {"bot": cls.name, "vetoes": len(vetoes), "suggestions": [],
                 "note": f"No repeated pattern yet (needs {MIN_VETOES}+ vetoes with something in common)."}

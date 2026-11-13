@@ -15,6 +15,7 @@ from pathlib import Path
 
 from . import benchmark, confidence, data, journal, loader
 from .bot import Bot, Entry, Exit, NoTrade, Position, View
+from .errtext import short
 
 COSTS = json.loads((Path(__file__).with_name("costs.json")).read_text())
 QUICK_DAYS = 30          # calendar days per sample (tuned + untested) in a quick run
@@ -119,13 +120,16 @@ def earlier_sessions(sym: str, day: date, timeframe: str, n: int, fetch=None) ->
 
 def run_day(bot: Bot, sym: str, day: date, bs: list, cost: dict, on_entry=None,
             trace: list | None = None, close_at_end: bool = False,
-            ghosts: list | None = None, history: list | None = None) -> tuple[list[Trade], list[str]]:
+            ghosts: list | None = None, history: list | None = None,
+            entries_from: date | None = None) -> tuple[list[Trade], list[str]]:
     """Play one day bar by bar. Optional `on_entry(view, entry)` may return a changed Entry (a moved stop/target) or
     NoTrade (a veto); the slot still counts as used. Optional `trace` gets one dict per bar saying what the bot
     decided and why (the chart's "why not here?" click). Optional `ghosts` gets the near misses (NoTrade.almost)
     played out on paper; one ghost at a time, and none while the bot is in a real trade. `history`: the earlier
     sessions for view.history; when it isn't passed and the bot asks for history_days, it's downloaded here, so every
-    caller (backtest, chart, luck meter, paper log...) gives the bot the same view."""
+    caller (backtest, chart, luck meter, paper log...) gives the bot the same view. `entries_from`: bars before this
+    date are warm-up only; the bot's indicators see them, but it can't open a trade (or a ghost) on them, so a test
+    window starts flat, the way a bot switched on that morning would."""
     ind_full = bot.indicators(bs)
     trades, problems, pos, n_in = [], [], None, 0
     if history is None:
@@ -149,8 +153,13 @@ def run_day(bot: Bot, sym: str, day: date, bs: list, cost: dict, on_entry=None,
                 note({"t": b.t, "kind": "exit", "reason": f"exit: {done.why_out} at {done.exit:.2f} ({done.r:+.2f}R after costs)"})
             else:
                 tgt = "none" if pos.target is None else f"{pos.target:.2f}"
-                note({"t": b.t, "kind": "holding", "reason": f"in a {pos.side} trade since {pos.entry_time:%H:%M}: "
+                since = (f"{pos.entry_time:%b} {pos.entry_time.day}" if bot.timeframe == "1Day"     # a daily candle has no clock time
+                         else f"{pos.entry_time:%H:%M}")
+                note({"t": b.t, "kind": "holding", "reason": f"in a {pos.side} trade since {since}: "
                                                              f"stop {pos.stop:.2f}, target {tgt}"})
+            continue
+        if entries_from and b.t.date() < entries_from:
+            note({"t": b.t, "kind": "no_trade", "reason": f"warm-up: history only, the test starts {entries_from}"})
             continue
         if last_bar and (bot.flat_by_close or close_at_end):
             note({"t": b.t, "kind": "no_trade", "reason": "last bar of the day: no new trades"}); continue
@@ -300,8 +309,9 @@ def run_window(bot: Bot, symbols: list[str], start: date, end: date, feed: str =
                warmup_days: int = 0, filters: dict | None = None) -> tuple[list[Trade], list[Trade], list[str]]:
     """Every symbol over one date window: (trades, ghost trades, problems). `fetch(sym, start, end, timeframe, feed)`
     defaults to Alpaca (data.bars). Pass `peek={}` to run the no-peek check once (its result lands in peek['problem']).
-    `warmup_days`: extra calendar days fetched before `start` so daily bots have history; trades entered during the
-    warmup are not counted."""
+    `warmup_days`: extra calendar days fetched before `start` so daily bots have history. The bot only reads those
+    bars: it can't enter during the warmup, so it starts the window flat (a position opened in the warmup would
+    otherwise stay open into the window and block every new entry, hiding a long-hold bot's trades)."""
     fetch = fetch or data.bars
     cost = COSTS[bot.asset]
     trades, ghosts, problems = [], [], []
@@ -313,7 +323,7 @@ def run_window(bot: Bot, symbols: list[str], start: date, end: date, feed: str =
         except RuntimeError:       # missing keys: stop and say so
             raise
         except Exception as e:     # one symbol without data never stops the rest
-            problems.append(f"{sym} {start}..{end}: no data ({type(e).__name__}: {str(e)[:120]})")
+            problems.append(f"{sym} {start}..{end}: no data ({short(e)})")
             continue
         raw, bad = data.clean(raw)
         problems += [f"{sym}: {x}" for x in bad]
@@ -329,10 +339,11 @@ def run_window(bot: Bot, symbols: list[str], start: date, end: date, feed: str =
                 if (msg := no_peek_check(bot, bs)):
                     peek["problem"] = msg
             t, probs = run_day(bot, sym, day, bs, cost, on_entry or filter_hook(filters, sym),
-                               close_at_end=bot.timeframe == "1Day", ghosts=ghosts, history=hist)
+                               close_at_end=bot.timeframe == "1Day", ghosts=ghosts, history=hist,
+                               entries_from=start if bot.timeframe == "1Day" else None)
             trades += t
             problems += probs[:5]
-    if warmup_days:
+    if warmup_days:                                # belt and braces: nothing entered before the window counts
         trades = [t for t in trades if t.t_in[:10] >= str(start)]
         ghosts = [g for g in ghosts if g.t_in[:10] >= str(start)]
     trades.sort(key=lambda t: t.t_in); ghosts.sort(key=lambda t: t.t_in)

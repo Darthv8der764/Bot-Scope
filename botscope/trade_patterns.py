@@ -23,6 +23,14 @@ AFTER = ("after a win", "after a loss", "first trade of the day")
 DAY_PARTS = ("morning", "afternoon")                  # entry before 12:00 ET / from 12:00 on
 
 
+def _is_day(s: str) -> bool:
+    try:
+        datetime.strptime(s, "%Y-%m-%d")
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def day_part(t: dict) -> str:
     """Weekday and time of day of the entry, e.g. "Friday afternoon"."""
     when = datetime.fromisoformat(t["opened"])
@@ -74,15 +82,17 @@ def table(trades: list[dict], min_trades: int = MIN_TRADES) -> dict:
     """The pattern table for a list of trades (each with trade_id, opened, closed, pnl and optional r)."""
     min_trades = max(1, int(min_trades))
     by: dict[str, dict[str, list]] = {k: defaultdict(list) for k in ("setup", "hour", "weekday", "day_part", "holding", "after")}
-    after = after_what(trades)
+    timed = [t for t in trades if trade_import.has_time(t)]       # date-only trades: no hour, holding time or order
+    after = after_what(timed)
     for t in trades:
         shim = SimpleNamespace(t_in=t["opened"])
         by["setup"][t.get("setup") or "no tag yet"].append(t)
-        by["hour"][timemap._bucket(shim, "hour")].append(t)
         by["weekday"][timemap._bucket(shim, "weekday")].append(t)
-        by["day_part"][day_part(t)].append(t)
-        by["holding"][holding_bucket(t)].append(t)
-        by["after"][after[t["trade_id"]]].append(t)
+        if trade_import.has_time(t):
+            by["hour"][timemap._bucket(shim, "hour")].append(t)
+            by["day_part"][day_part(t)].append(t)
+            by["holding"][holding_bucket(t)].append(t)
+            by["after"][after[t["trade_id"]]].append(t)
     first_hour = lambda k: min(datetime.fromisoformat(t["opened"]).hour for t in by["hour"][k])   # noqa: E731
     return {
         "by_setup": _rows(by["setup"], sorted(by["setup"], key=lambda k: (k == "no tag yet", k)), min_trades),
@@ -93,18 +103,31 @@ def table(trades: list[dict], min_trades: int = MIN_TRADES) -> dict:
         "by_trade_before": _rows(by["after"], AFTER, min_trades),
         "all": row("all trades", trades, min_trades),
         "min_trades": min_trades,
+        "date_only": len(trades) - len(timed),
     }
 
 
-def patterns(source: str | None = None, min_trades: int = MIN_TRADES) -> dict:
-    """The pattern table for your saved trades (one import, or all of them), with their notes."""
+def patterns(source: str | None = None, min_trades: int = MIN_TRADES, since: str | None = None,
+             until: str | None = None) -> dict:
+    """The pattern table for your saved trades (one import, or all of them), with their notes. `since` / `until`
+    (YYYY-MM-DD, both included) keep only trades opened in that range."""
     trades = trade_notes.with_notes(trade_import.trades(source))
+    if since or until:
+        for d in (since, until):
+            if d and not _is_day(d):
+                return {"trades": 0, "error": f"'{str(d)[:20]}' isn't a date like 2026-09-01"}
+        trades = [t for t in trades if (since or "") <= t["opened"][:10] <= (until or "9999")]
+        if not trades:
+            return {"trades": 0, "error": f"no trades between {since or 'the start'} and {until or 'now'}"}
     if not trades:
-        return {"trades": 0, "error": "no trades imported yet: import from Alpaca paper or a Webull CSV, or load the "
-                                      "demo trades"}
+        return {"trades": 0, "error": "no trades imported yet: import from Alpaca paper or a Webull, Robinhood or "
+                                      "Fidelity CSV, or load the demo trades"}
     out = table(trades, min_trades)
     days = sorted({t["opened"][:10] for t in trades})
     return {"trades": len(trades), "from": days[0], "to": days[-1], "sources": sorted({t["source"] for t in trades}),
             **out, "times": "US Eastern, by entry time",
+            "date_only_note": (f"{out['date_only']} trades come from a file with dates but no times (Robinhood or "
+                               "Fidelity), so they're only in the setup, weekday and all-trades tables.")
+                              if out["date_only"] else None,
             "note": "Counts, dollars and R from your own past trades (R only where a note has a stop). Rows under "
                     f"{out['min_trades']} trades are too small to compare. Not financial advice."}

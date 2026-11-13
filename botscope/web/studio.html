@@ -6,7 +6,7 @@
 <script src="/theme.js"></script>
 <title>BotScope Studio</title>
 <style>
-:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #1a9e6a; --down: #d64545; --line: #e3e2dd; --accent: #2f6fde; }
+:root { --bg: #f7f7f5; --panel: #fff; --ink: #111; --muted: #66665f; --up: #137d55; --down: #c23b3b; --line: #e3e2dd; --accent: #2f6fde; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; } }
 :root[data-theme="dark"] { --bg: #121212; --panel: #1b1b1a; --ink: #f1f0ea; --muted: #9a9a94; --up: #2fbf86; --down: #ef6363; --line: #2c2c2a; --accent: #6b9bff; }
 * { box-sizing: border-box; }
@@ -291,8 +291,8 @@ async function loadImported() {
   el.innerHTML = `<p class="muted">Loading your imported bots…</p>`;
   let r;
   try { r = await (await fetch("/api/imported?orders=1")).json(); } catch (e) { el.innerHTML = `<p class="muted">Could not load: ${esc(e.message)}</p>`; return; }
-  const usd = (x) => x == null ? "–" : (x < 0 ? "-$" : "$") + Math.abs(x).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  const px = (x) => x == null ? "" : "$" + (+x).toLocaleString(undefined, { maximumFractionDigits: 4 });
+  const usd = (x) => x == null ? "–" : (x < 0 ? "-$" : "$") + Math.abs(x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const px = (x) => x == null ? "" : "$" + (+x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });   // "$395.10", not "$395.1"
   const ord = (o) => `<tr><td>${esc((o.submitted || "").replace("T", " ").slice(0, 16))}</td><td>${esc(o.symbol)}</td><td>${esc(o.side)}</td><td class="num">${o.qty ?? ""}</td>
     <td>${esc(o.type || "")}${o.limit != null ? " " + px(o.limit) : ""}${o.stop != null ? " stop " + px(o.stop) : ""}</td><td>${esc(o.status)}</td><td class="num">${o.filled_price != null ? px(o.filled_price) : ""}</td></tr>`;
   const otable = (rows) => `<div class="tablewrap"><table><tr><th>Sent</th><th>Symbol</th><th>Side</th><th class="num">Qty</th><th>Type</th><th>Status</th><th class="num">Filled at</th></tr>${rows.map(ord).join("")}</table></div>`;
@@ -302,7 +302,7 @@ async function loadImported() {
   const strat = (b) => `<details class="strat" data-imp="${esc(b.import)}" data-bot="${esc(b.bot)}"><summary>
       <span class="sname">${esc(b.bot)}</span>
       <span><b>${b.trades}</b> trades</span><span>${b.won} won (${Math.round(100 * b.won / (b.trades || 1))}%)</span>
-      <span>avg ${fmtR(b.avg_r)}</span><span class="${b.total_usd > 0 ? "up" : b.total_usd < 0 ? "down" : ""}">${usd(b.total_usd)}</span>
+      <span>avg ${b.avg_r != null ? fmtR(b.avg_r) : usd(b.total_usd / (b.trades || 1)) + " a trade"}</span><span class="${b.total_usd > 0 ? "up" : b.total_usd < 0 ? "down" : ""}">${usd(b.total_usd)}</span>
       <span class="muted">${esc(b.from || "?")} to ${esc(b.to || "?")}</span></summary><div class="strades muted">Loading trades…</div></details>`;
   const total = (bs) => bs.reduce((a, b) => a + b.total_usd, 0);
   el.innerHTML = `<div class="card"><h2>My bots (imported, read-only)</h2>

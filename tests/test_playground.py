@@ -91,3 +91,12 @@ def test_sides_lead_only_when_one_side_is_clearly_better(monkeypatch):
     assert (p["sides_lead"] or "").startswith("longs only made +7.2R") and "make_shadow" in p["sides_lead"]
     c["trades"] = [t for t in c["trades"] if t.side == "long"]
     assert playground.play("x")["sides_lead"] is None
+
+
+def test_playground_lists_the_shared_indicators(monkeypatch):
+    from botscope import indicators
+    _cache(monkeypatch)
+    names = [i["name"] for i in playground.play("x")["indicators"]]
+    assert names == [i["name"] for i in indicators.CATALOG] and {"rvol", "adx", "chop"} <= set(names)
+    page = (playground.Path(playground.__file__).parent / "web" / "playground.html").read_text()
+    assert 'id="inds"' in page and "d.indicators" in page

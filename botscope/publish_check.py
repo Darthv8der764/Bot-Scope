@@ -35,7 +35,8 @@ ALLOW = ("botscope/*.py", "botscope/web/*", "botscope/costs.json", "botscope/mar
          "skills/*", "skills/*/*", ".claude-plugin/*", "docs/*.md", "tests/*.py", "README.md", "CONTRIBUTING.md",
          "pyproject.toml", ".env.example", ".gitignore", "LICENSE", "uv.lock", "PRIVACY.md", "SECURITY.md")
 DENY = ("QUESTIONS.md", "ROADMAP.md", "EXPERIMENTS.md", "factory/*", "reports/*", "data/*", "botscope.local.json",
-        "botscope.private.json", ".env", ".env.*", "LICENSE.draft")
+        "botscope.private.json", ".env", ".env.*", "LICENSE.draft",
+        "docs/standout-research.md")                         # business plan: where we beat competitors
 SHINGLE = 6                        # consecutive meaningful code lines that make one rule fingerprint
 # Images can't be scanned like text, so only these go out: each was looked at by a person (demo data, example bots
 # only, no account, no names, no metadata beyond a colour profile) and is pinned by its sha256. A changed image no

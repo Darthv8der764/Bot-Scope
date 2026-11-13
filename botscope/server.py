@@ -11,7 +11,7 @@ import threading
 from mcp.server.mcpserver import MCPServer
 
 from . import account, backtest, loader, view
-from .errtext import say
+from .errtext import keys_rejected, say
 
 mcp = MCPServer(
     "botscope",
@@ -1018,10 +1018,7 @@ def check_bot(bot: str) -> dict:
 @mcp.tool()
 def account_summary() -> dict:
     """The user's Alpaca PAPER account: equity, cash, today's change and open positions. Read only."""
-    try:
-        return account.summary()
-    except RuntimeError as e:
-        return {"error": say(e)}
+    return _safe(account.summary)          # missing keys, or Alpaca refusing them: one plain sentence
 
 
 @mcp.tool()
@@ -1038,6 +1035,10 @@ def _safe(fn, *a, **k):
         return fn(*a, **k)
     except (KeyError, RuntimeError, ValueError) as e:
         return {"error": say(e)}
+    except Exception as e:      # Alpaca refusing the keys: one plain sentence, not its raw 401 web page
+        if keys_rejected(e):
+            return {"error": say(e)}
+        raise
 
 
 @mcp.tool()
@@ -1066,7 +1067,8 @@ def trade_clip(bot: str, symbol: str | None = None, day: str | None = None, trad
 
 @mcp.tool()
 def why_not_here(bot: str, symbol: str, day: str, time: str) -> dict:
-    """What the bot decided on one candle and why (e.g. "range too narrow"). `time` = HH:MM New York time."""
+    """What the bot decided on one candle and why (e.g. "range too narrow"). `time` = HH:MM New York time (daily bots:
+    the candle of `day`, any time)."""
     return _safe(view.why_not_here, bot, symbol, day, time)
 
 
@@ -1161,17 +1163,22 @@ def import_my_trades(how: str = "summary", path: str | None = None, tz: str | No
                      source: str | None = None) -> dict:
     """Import my trades: the trades the user placed by hand (not a bot's), read-only, into their local journal.
     how = "alpaca" (filled orders from the PAPER account, last `days` days, leaving out orders marked as a bot's), "webull" (a Webull orders CSV at `path`;
-    `tz` = the time zone the file's times are in, e.g. America/Chicago: ask the user, never guess it), "fills" (a CSV
+    `tz` = the time zone the file's times are in, e.g. America/Chicago: ask the user, never guess it), "robinhood" (a
+    Robinhood account activity report CSV at `path`) or "fidelity" (a Fidelity account history CSV at `path`): these two
+    have dates but no times, so their trades stay out of the time-of-day tables; stocks only, options are counted
+    and skipped. Their column names aren't confirmed from real files yet. "fills" (a CSV
     with symbol, side, qty, price, time, tz), "demo" (made-up demo trades, labelled), "forget" (remove one `source`'s
     trades) or "summary" (what's imported). Fills are paired first-in-first-out into round trips, times shown in US
-    Eastern. If the columns aren't found, show the file's columns from the error. Show round trips, rows not filled
-    and unreadable rows (with their lines). Nothing is traded. Not financial advice."""
+    Eastern. If the columns aren't found, show the file's columns from the error. Show round trips, rows not filled,
+    unreadable rows (with their lines) and `duplicates` (trades already imported from another source, left out). Nothing is traded. Not financial advice."""
     from . import trade_import as ti
     if how == "alpaca":
         return _safe(ti.from_alpaca, days)
-    if how in ("webull", "fills"):
+    if how in ("webull", "fills", "robinhood", "fidelity"):
         if not path:
             return {"error": "give the CSV file's path"}
+        if how in ("robinhood", "fidelity"):
+            return _safe(ti.from_robinhood if how == "robinhood" else ti.from_fidelity, path)
         return _safe(ti.from_webull, path, tz) if how == "webull" else _safe(ti.from_fills_file, path, tz)
     if how == "demo":
         return _safe(ti.from_demo)
@@ -1205,13 +1212,15 @@ def note_my_trade(trade_id: str, setup: str | None = None, stop: float | None = 
 
 
 @mcp.tool()
-def my_trade_patterns(source: str | None = None, min_trades: int = 5) -> dict:
+def my_trade_patterns(source: str | None = None, min_trades: int = 5, since: str | None = None,
+                      until: str | None = None) -> dict:
     """My trades pattern table: the user's own imported trades grouped by setup tag, entry hour, weekday, holding
     time, and the trade before it that day (after a win / after a loss / first of the day). Each row: trades, won
     (a count, never a %), total and average $, R where a stop is known. Rows under min_trades say "not enough trades
-    yet": say so, don't compare them. Show the tables as they are, plain numbers; no advice, no verdicts."""
+    yet": say so, don't compare them. `since` / `until` (YYYY-MM-DD) limit it to trades opened in that range. Show the
+    tables as they are, plain numbers; no advice, no verdicts."""
     from . import trade_patterns
-    return _safe(trade_patterns.patterns, source, min_trades)
+    return _safe(trade_patterns.patterns, source, min_trades, since, until)
 
 
 @mcp.tool()

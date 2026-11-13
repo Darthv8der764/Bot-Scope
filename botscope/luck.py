@@ -108,7 +108,8 @@ def luck_meter(bot_cls, symbols: list[str] | None = None, years: bool = False, f
     rng = random.Random(seed)
     real, per_day = [], []
     for sym, day, bs, start in groups:
-        tr, _ = backtest.run_day(bot, sym, day, bs, cost, close_at_end=bot.timeframe == "1Day")
+        tr, _ = backtest.run_day(bot, sym, day, bs, cost, close_at_end=bot.timeframe == "1Day",
+                                 entries_from=start if bot.timeframe == "1Day" else None)
         tr = [t for t in tr if t.t_in[:10] >= str(start)]
         real += tr
         if tr:
@@ -140,7 +141,8 @@ def luck_meter(bot_cls, symbols: list[str] | None = None, years: bool = False, f
         tot = 0.0
         for sym, day, bs, start in groups:
             fake = shuffle_bars(bs, rng)
-            tr, _ = backtest.run_day(bot, sym, day, fake, cost, close_at_end=bot.timeframe == "1Day")
+            tr, _ = backtest.run_day(bot, sym, day, fake, cost, close_at_end=bot.timeframe == "1Day",
+                                     entries_from=start if bot.timeframe == "1Day" else None)
             tot += sum(t.r for t in tr if t.t_in[:10] >= str(start))
         sh.append(tot)
     sh_avg = round(sum(sh) / len(sh), 2) if sh else None
